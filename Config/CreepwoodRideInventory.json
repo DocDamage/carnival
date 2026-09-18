@@ -1,0 +1,127 @@
+{
+  "schema": 2,
+  "content_root": "/Game/Creepwood_Carnival_Meshingun",
+  "ride_base_class": "Environment/Blueprint/Ride/Structure/BP_Rides_Parent",
+  "ride_state_enum": {
+    "asset": "Environment/Blueprint/Ride/Structure/E_RideState",
+    "values": ["Starting", "Started", "Stopping", "Stopped"]
+  },
+  "control_functions": ["StartRide", "StopRide", "TurnOnRide", "TurnOffRide"],
+  "motion_drivers_observed": {
+    "rotating_movement_component": ["FerrisWheel", "Swing", "Teapot", "BalloonTower", "ClownRide"],
+    "timeline_animation": ["PirateShip", "Carousel", "FlyingBobs", "Circus", "BalloonTower"]
+  },
+  "rides": [
+    {
+      "id": "FerrisWheel",
+      "display_name": "Ferris Wheel",
+      "base_blueprint": "Environment/Blueprint/Ride/BP_FerrisWheel_Ride_01a",
+      "in_lv_carnival": false,
+      "in_maps": ["Lv_LightingDay", "Lv_LightingNight", "Lv_LightingNightSnow"],
+      "motion_driver": "RotatingMovementComponent",
+      "motion_source": "rotating wheel / SM_Cabin_01a gondolas",
+      "seats": "45 gondola cabins (SM_Cabin_01a), physics swing via PhysicsConstraintComponent"
+    },
+    {
+      "id": "Carousel",
+      "display_name": "Carousel",
+      "base_blueprint": "Environment/Blueprint/Ride/BP_Carousel_Ride_01a",
+      "in_lv_carnival": false,
+      "in_maps": ["Lv_LightingDay", "Lv_LightingNight", "Lv_LightingNightSnow"],
+      "motion_driver": "Timeline (Carousel)",
+      "motion_source": "SharedRoot / Body_MainAnchor / Horses",
+      "seats": "44 horses (SM_Horse_01a) + 3 benches (SM_Bench_01a), 3 floors"
+    },
+    {
+      "id": "PirateShip",
+      "display_name": "Pirate Ship",
+      "base_blueprint": "Environment/Blueprint/Ride/BP_PirateShip_Ride_01a",
+      "in_lv_carnival": true,
+      "motion_driver": "Timeline (PirateShipAnimation)",
+      "motion_source": "SM_Mainboat_PirateRide (swinging boat)",
+      "seats": "row benches on the boat"
+    },
+    {
+      "id": "Swing",
+      "display_name": "Swing",
+      "base_blueprint": "Environment/Blueprint/Ride/BP_Swing_Ride_01a",
+      "in_lv_carnival": true,
+      "motion_driver": "RotatingMovementComponent (Anchor + Sphere)",
+      "motion_source": "MainAnchor / Swings (rotating assembly)",
+      "seats": "~17 suspended chairs (SM_Swing_Chair_10..26) on chains"
+    },
+    {
+      "id": "Teapot",
+      "display_name": "Teapot",
+      "base_blueprint": "Environment/Blueprint/Ride/BP_Teapot_Ride_01a",
+      "in_lv_carnival": true,
+      "motion_driver": "RotatingMovementComponent (Anchor + Cup1..6)",
+      "motion_source": "SM_Teapot_Ride_Platform4 + per-cup rotation",
+      "seats": "6 teacups (SM_Teapot_Ride_Cup..Cup6)"
+    },
+    {
+      "id": "FlyingBobs",
+      "display_name": "Flying Bobs",
+      "base_blueprint": "Environment/Blueprint/Ride/BP_FlyingBobs_Ride_01a",
+      "in_lv_carnival": true,
+      "motion_driver": "Timeline (FlyingBobAnimation)",
+      "motion_source": "SharedRoot / spline rail",
+      "seats": "cars on a rail"
+    },
+    {
+      "id": "BumperCars",
+      "display_name": "Bumper Cars",
+      "base_blueprint": "Environment/Blueprint/Ride/BP_BumperCars_Ride_01a",
+      "in_lv_carnival": true,
+      "motion_driver": "dedicated arena gameplay",
+      "motion_source": "",
+      "seats": "per-car driver",
+      "notes": "DEFER: separate arena AI/gameplay feature"
+    },
+    {
+      "id": "BalloonTower",
+      "display_name": "Balloon Tower",
+      "base_blueprint": "Environment/Blueprint/Ride/BP_BalloonTower_Ride_01a",
+      "in_lv_carnival": true,
+      "motion_driver": "RotatingMovementComponent (Anchor + Seat1..8) + Timeline",
+      "motion_source": "per-seat RotatingMovement_SeatN",
+      "seats": "balloon cabins (SM_BalloonRide_seat)"
+    },
+    {
+      "id": "ClownRide",
+      "display_name": "Clown Ride",
+      "base_blueprint": "Environment/Blueprint/Ride/BP_Clown_Ride_01a",
+      "in_lv_carnival": true,
+      "motion_driver": "RotatingMovementComponent (Anchor + Seat1..5)",
+      "motion_source": "Anchor_CenterPiece",
+      "seats": "6 seats (SM_ClownRideseat)"
+    },
+    {
+      "id": "Circus",
+      "display_name": "Circus",
+      "base_blueprint": "Environment/Blueprint/Ride/BP_Circus_Ride_01a",
+      "in_lv_carnival": true,
+      "motion_driver": "Timeline (Circus)",
+      "motion_source": "",
+      "seats": ""
+    },
+    {
+      "id": "HauntedHouse",
+      "display_name": "Haunted House",
+      "base_blueprint": "Environment/Blueprint/Ride/BP_HauntedHouse_Ride_01a",
+      "in_lv_carnival": true,
+      "motion_driver": "walk-through / dark ride",
+      "motion_source": "",
+      "seats": ""
+    },
+    {
+      "id": "HotAirBalloon",
+      "display_name": "Hot Air Balloon",
+      "base_blueprint": "Environment/Blueprint/Ride/BP_HotairBalloon_Ride_01a",
+      "in_lv_carnival": true,
+      "motion_driver": "C_HotairBalloonFloat (vertical)",
+      "motion_source": "",
+      "seats": "balloon baskets"
+    }
+  ]
+}

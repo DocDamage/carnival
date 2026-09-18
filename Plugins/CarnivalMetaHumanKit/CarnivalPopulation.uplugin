@@ -1,0 +1,18 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1.0",
+  "FriendlyName": "Carnival Population & Ride Passengers",
+  "Description": "Reusable adult crowd and ride-passenger foundation for UE 5.8 carnival projects, designed to pair with MetaHuman Crowd/Mass without hard-coupling runtime ride logic to experimental APIs.",
+  "Category": "AI",
+  "CreatedBy": "OpenAI",
+  "CanContainContent": true,
+  "IsBetaVersion": true,
+  "Modules": [
+    {
+      "Name": "CarnivalPopulation",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ]
+}

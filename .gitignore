@@ -1,0 +1,23 @@
+# Unreal Engine generated / non-source files (never commit)
+Binaries/
+Intermediate/
+DerivedDataCache/
+Saved/
+Build/
+*.sln
+*.slnx
+*.suo
+*.xcodeproj
+.vs/
+.vsconfig
+.idea/
+Automation_*.sln*
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Purchased third-party Creepwood content — licensed, do NOT redistribute.
+# Add your own licensed copy into Content/Creepwood_Carnival_Meshingun/ before opening.
+Content/Creepwood_Carnival_Meshingun/
+

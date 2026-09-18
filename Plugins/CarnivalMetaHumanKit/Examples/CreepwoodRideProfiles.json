@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "note": "Seat counts and moving-component names must be mapped against the actual purchased project. Values here are intentionally not guessed.",
+  "rides": [
+    {"id":"FerrisWheel","display_name":"Ferris Wheel","seat_count":0,"motion_source":""},
+    {"id":"BumperCars","display_name":"Bumper Cars","seat_count":0,"motion_source":""},
+    {"id":"Carousel","display_name":"Carousel","seat_count":0,"motion_source":""},
+    {"id":"Circus","display_name":"Circus","seat_count":0,"motion_source":""},
+    {"id":"ClownRide","display_name":"Clown Ride","seat_count":0,"motion_source":""},
+    {"id":"FlyingBob","display_name":"Flying Bob","seat_count":0,"motion_source":""},
+    {"id":"HauntedHouse","display_name":"Haunted House","seat_count":0,"motion_source":""},
+    {"id":"HotAirBalloon","display_name":"Hot Air Balloon","seat_count":0,"motion_source":""},
+    {"id":"PirateShip","display_name":"Pirate Ship","seat_count":0,"motion_source":""},
+    {"id":"Swing","display_name":"Swing","seat_count":0,"motion_source":""},
+    {"id":"Teapot","display_name":"Teapot","seat_count":0,"motion_source":""},
+    {"id":"BalloonTower","display_name":"Balloon Tower","seat_count":0,"motion_source":""}
+  ]
+}

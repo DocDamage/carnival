@@ -1,0 +1,12 @@
+{
+  "Calm": {"body_slot":"Ride_Calm","hand_ik":true},
+  "Grip": {"body_slot":"Ride_Grip","hand_ik":true},
+  "LeanLeft": {"body_slot":"Ride_Lean_L","hand_ik":true},
+  "LeanRight": {"body_slot":"Ride_Lean_R","hand_ik":true},
+  "HandsUp": {"body_slot":"Ride_HandsUp","hand_ik":false},
+  "Laugh": {"body_slot":"Ride_Laugh","hand_ik":true},
+  "Cheer": {"body_slot":"Ride_Cheer","hand_ik":false},
+  "Scream": {"body_slot":"Ride_Scream","hand_ik":true},
+  "Brace": {"body_slot":"Ride_Brace","hand_ik":true},
+  "Relief": {"body_slot":"Ride_Relief","hand_ik":true}
+}
