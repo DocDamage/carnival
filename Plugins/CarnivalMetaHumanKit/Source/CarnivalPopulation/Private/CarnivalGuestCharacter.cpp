@@ -6,6 +6,28 @@ ACarnivalGuestCharacter::ACarnivalGuestCharacter()
     PassengerComponent = CreateDefaultSubobject<UCarnivalRidePassengerComponent>(TEXT("PassengerComponent"));
 }
 
+void ACarnivalGuestCharacter::BeginPlay()
+{
+    Super::BeginPlay();
+    ApplyRoleLook(GuestRole);
+}
+
+void ACarnivalGuestCharacter::SetGuestRole(ECarnivalGuestRole NewRole)
+{
+    if (GuestRole == NewRole)
+    {
+        return;
+    }
+    GuestRole = NewRole;
+    OnRoleChanged.Broadcast(NewRole);
+    ApplyRoleLook(NewRole);
+}
+
+void ACarnivalGuestCharacter::ApplyRoleLook_Implementation(ECarnivalGuestRole NewRole)
+{
+    // Blueprint-overridable: assign the mesh / outfit for the role.
+}
+
 void ACarnivalGuestCharacter::CarnivalRideBoarded_Implementation(AActor* RideActor, FName SeatId, ECarnivalRestraintType RestraintType)
 {
     // Blueprint-overridable visual hook (play a "sit down" montage, snap IK, etc.).

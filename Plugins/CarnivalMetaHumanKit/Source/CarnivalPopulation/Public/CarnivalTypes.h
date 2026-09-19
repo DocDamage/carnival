@@ -51,6 +51,20 @@ enum class ECarnivalGuestArchetype : uint8
     MotionSensitive
 };
 
+UENUM(BlueprintType)
+enum class ECarnivalGuestRole : uint8
+{
+    None,
+    Guest,           // Park visitor — rides, queues, reacts.
+    RideOperator,    // Operates a ride.
+    FoodVendor,      // Food / drink stall.
+    GameAttendant,   // Carnival game booth.
+    TicketTaker,     // Entry / ticket booth.
+    Entertainer,     // Mascot / street performer.
+    Security,        // Patrol / security.
+    Janitor          // Cleaning / maintenance.
+};
+
 USTRUCT(BlueprintType)
 struct CARNIVALPOPULATION_API FCarnivalRideTelemetry
 {
