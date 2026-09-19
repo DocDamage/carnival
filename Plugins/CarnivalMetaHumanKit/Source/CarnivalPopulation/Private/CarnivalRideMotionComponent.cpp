@@ -19,11 +19,18 @@ void UCarnivalRideMotionComponent::BeginPlay()
         // Prefer a named SceneComponent on the owner (e.g. "MainAnchor" on the Swing).
         if (!MotionSourceName.IsNone())
         {
+            const FString MotionSourceStr = MotionSourceName.ToString();
             TArray<UActorComponent*> Components;
             Owner->GetComponents(Components);
             for (UActorComponent* Component : Components)
             {
-                if (Component && Component->GetFName() == MotionSourceName)
+                if (!Component)
+                {
+                    continue;
+                }
+                const FString ComponentName = Component->GetName();
+                if (ComponentName.Equals(MotionSourceStr, ESearchCase::IgnoreCase) ||
+                    ComponentName.Contains(MotionSourceStr, ESearchCase::IgnoreCase))
                 {
                     if (USceneComponent* Scene = Cast<USceneComponent>(Component))
                     {

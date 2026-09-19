@@ -42,6 +42,42 @@ RIDES = {
         # Pirate Ship has row benches (not discrete chair meshes): seats are placed manually.
         "seat_mesh_pattern": None,
     },
+    "BalloonTower": {
+        "output": "BP_BalloonTower_Carnival",
+        "parent": "/Game/Creepwood_Carnival_Meshingun/Environment/Blueprint/Ride/BP_BalloonTower_Ride_01a",
+        "motion_source": "MainAnchor",
+        "seat_mesh_pattern": None,
+    },
+    "ClownRide": {
+        "output": "BP_ClownRide_Carnival",
+        "parent": "/Game/Creepwood_Carnival_Meshingun/Environment/Blueprint/Ride/BP_Clown_Ride_01a",
+        "motion_source": "Anchor_CenterPiece",
+        "seat_mesh_pattern": None,
+    },
+    "FlyingBobs": {
+        "output": "BP_FlyingBobs_Carnival",
+        "parent": "/Game/Creepwood_Carnival_Meshingun/Environment/Blueprint/Ride/BP_FlyingBobs_Ride_01a",
+        "motion_source": "SharedRoot",
+        "seat_mesh_pattern": None,
+    },
+    "Circus": {
+        "output": "BP_Circus_Carnival",
+        "parent": "/Game/Creepwood_Carnival_Meshingun/Environment/Blueprint/Ride/BP_Circus_Ride_01a",
+        "motion_source": None,
+        "seat_mesh_pattern": None,
+    },
+    "HauntedHouse": {
+        "output": "BP_HauntedHouse_Carnival",
+        "parent": "/Game/Creepwood_Carnival_Meshingun/Environment/Blueprint/Ride/BP_HauntedHouse_Ride_01a",
+        "motion_source": None,
+        "seat_mesh_pattern": None,
+    },
+    "HotAirBalloon": {
+        "output": "BP_HotAirBalloon_Carnival",
+        "parent": "/Game/Creepwood_Carnival_Meshingun/Environment/Blueprint/Ride/BP_HotairBalloon_Ride_01a",
+        "motion_source": None,
+        "seat_mesh_pattern": None,
+    },
 }
 
 
