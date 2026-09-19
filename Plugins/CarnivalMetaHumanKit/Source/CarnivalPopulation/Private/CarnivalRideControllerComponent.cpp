@@ -2,6 +2,7 @@
 #include "CarnivalRideMotionComponent.h"
 #include "CarnivalRidePassengerComponent.h"
 #include "CarnivalRideSeatComponent.h"
+#include "Engine/World.h"
 #include "GameFramework/Actor.h"
 
 UCarnivalRideControllerComponent::UCarnivalRideControllerComponent()
@@ -18,7 +19,7 @@ void UCarnivalRideControllerComponent::BeginPlay()
     {
         if (UCarnivalRideMotionComponent* Motion = Owner->FindComponentByClass<UCarnivalRideMotionComponent>())
         {
-            Motion->OnTelemetryUpdated.AddDynamic(this, &UCarnivalRideControllerComponent::PushTelemetryToPassengers);
+            Motion->OnTelemetryUpdated.AddDynamic(this, &UCarnivalRideControllerComponent::HandleTelemetry);
         }
     }
 }
@@ -150,5 +151,56 @@ void UCarnivalRideControllerComponent::PushTelemetryToPassengers(const FCarnival
                 PassengerComponent->ApplyRideTelemetry(Telemetry);
             }
         }
+    }
+}
+
+void UCarnivalRideControllerComponent::HandleTelemetry(const FCarnivalRideTelemetry& Telemetry)
+{
+    // Always forward telemetry to seated passengers (only while Running).
+    PushTelemetryToPassengers(Telemetry);
+
+    if (!bAutoDetectPhase)
+    {
+        return;
+    }
+
+    const float DeltaTime = IsValid(GetWorld()) ? GetWorld()->GetDeltaSeconds() : 0.0f;
+
+    switch (RidePhase)
+    {
+    case ECarnivalRidePhase::Closed:
+        // Open the boarding loop automatically.
+        SetRidePhase(ECarnivalRidePhase::Loading);
+        break;
+
+    case ECarnivalRidePhase::Loading:
+    case ECarnivalRidePhase::Locked:
+        if (Telemetry.Speed >= MotionStartSpeed)
+        {
+            SetRidePhase(ECarnivalRidePhase::Running);
+            TimeBelowStopThreshold = 0.0f;
+        }
+        break;
+
+    case ECarnivalRidePhase::Running:
+        if (Telemetry.Speed <= MotionStopSpeed)
+        {
+            TimeBelowStopThreshold += DeltaTime;
+            if (TimeBelowStopThreshold >= StopHoldDuration)
+            {
+                SetRidePhase(ECarnivalRidePhase::Unloading);
+                UnboardAllPassengers();
+                SetRidePhase(ECarnivalRidePhase::Loading);
+                TimeBelowStopThreshold = 0.0f;
+            }
+        }
+        else
+        {
+            TimeBelowStopThreshold = 0.0f;
+        }
+        break;
+
+    default:
+        break;
     }
 }

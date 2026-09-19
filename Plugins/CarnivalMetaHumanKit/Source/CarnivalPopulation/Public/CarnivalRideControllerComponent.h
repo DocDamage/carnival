@@ -27,6 +27,18 @@ public:
     UPROPERTY(BlueprintReadOnly, Category="Carnival|Ride")
     ECarnivalRidePhase RidePhase = ECarnivalRidePhase::Closed;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Carnival|Ride", meta=(ToolTip="Automatically transition ride phases from motion telemetry (replaces manual StartRide/StopRide hooks)."))
+    bool bAutoDetectPhase = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Carnival|Ride", meta=(EditCondition="bAutoDetectPhase", ClampMin="0.0", ToolTip="Speed (cm/s) above which the ride is considered Running."))
+    float MotionStartSpeed = 40.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Carnival|Ride", meta=(EditCondition="bAutoDetectPhase", ClampMin="0.0", ToolTip="Speed (cm/s) below which the ride is considered stopped."))
+    float MotionStopSpeed = 10.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Carnival|Ride", meta=(EditCondition="bAutoDetectPhase", ClampMin="0.0", ToolTip="How long motion must stay below stop speed before unloading."))
+    float StopHoldDuration = 1.5f;
+
     UPROPERTY(BlueprintAssignable, Category="Carnival|Ride")
     FCarnivalControllerPhaseChangedSignature OnRidePhaseChanged;
 
@@ -55,6 +67,11 @@ protected:
     virtual void BeginPlay() override;
 
 private:
+    UFUNCTION()
+    void HandleTelemetry(const FCarnivalRideTelemetry& Telemetry);
+
     UPROPERTY(Transient)
     TArray<TObjectPtr<UCarnivalRideSeatComponent>> Seats;
+
+    float TimeBelowStopThreshold = 0.0f;
 };
