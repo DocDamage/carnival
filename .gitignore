@@ -18,6 +18,8 @@ Automation_*.sln*
 __pycache__/
 *.pyc
 
+# Purchased third-party Creepwood content — licensed, do NOT redistribute.
+# Add your own licensed copy into Content/Creepwood_Carnival_Meshingun/ before opening.
 # Raw downloaded asset archives from Fab / Marketplace
 Assets/
 DrivableMarsRoverCars/
