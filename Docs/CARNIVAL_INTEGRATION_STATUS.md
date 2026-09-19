@@ -243,16 +243,42 @@ never modified) and adds the CarnivalKit components.
   `is_actor`, `is_root_component`, `get_parent_handle`).
 - Reference implementation: `Engine/Plugins/Experimental/Toolsets/EditorToolset/.../actor.py`.
 
-### Remaining manual steps for the Swing (see `FIRST_RIDE_WIRING.md`)
+### All rides wired + instantiated (automated)
 
-1. In `BP_Swing_Carnival`, call `CarnivalRideMotion` → `SetMotionSource` with `MainAnchor`
-   in `BeginPlay`.
-2. Set `CarnivalRideController` → `RideId = "Swing"`, `ExitTransform`, and the same for
-   `CarnivalRideQueue`.
-3. Tune `PassengerOffset` / hand IK targets per seat (defaults are sensible placeholders).
-4. Place `CarnivalQueuePoint` actors along the physical queue.
-5. Hook the vendor `StartRide`/`StopRide` timeline to the controller's `SetRidePhase`.
-6. Create the MetaHuman passenger + shared ride AnimBP + IK.
+All 8 rides present in `LV_Carnival` are now derived, wired, and instantiated:
+
+| Ride | Derived BP | Motion source | Queue | Seats |
+|---|---|---|---|---|
+| Swing | `BP_Swing_Carnival` | `MainAnchor` | 8 | 34 (auto) |
+| Pirate Ship | `BP_PirateShip_Carnival` | `SM_Mainboat_PirateRide` | 8 | manual |
+| Balloon Tower | `BP_BalloonTower_Carnival` | `MainAnchor` | 8 | manual |
+| Clown Ride | `BP_ClownRide_Carnival` | `Anchor_CenterPiece` | 8 | manual |
+| Flying Bobs | `BP_FlyingBobs_Carnival` | `SharedRoot` | 8 | manual |
+| Circus | `BP_Circus_Carnival` | (root) | 8 | manual |
+| Haunted House | `BP_HauntedHouse_Carnival` | (root) | 8 | manual |
+| Hot Air Balloon | `BP_HotAirBalloon_Carnival` (×10) | (root) | 8 | manual |
+
+Reproduce after a fresh clone (in order): `Scripts/wire_ride.py`,
+`Scripts/instantiate_ride.py`, `Scripts/place_queue_points.py`.
+
+Plugin additions since the first-ride pass:
+
+- `UCarnivalRideMotionComponent::MotionSourceName` — auto-resolves the moving
+  SceneComponent at BeginPlay (substring match, so suffixed names like
+  `SM_Mainboat_PirateRide_StaticMeshComponent0` resolve).
+- `UCarnivalRideControllerComponent` — auto-detects ride phase from motion telemetry
+  (`bAutoDetectPhase`), replacing manual `StartRide`/`StopRide` → `SetRidePhase` hooks.
+- `ACarnivalGuestCharacter` — asset-agnostic guest base (`ACharacter` +
+  `CarnivalRidePassengerComponent` + `ICarnivalPassengerInterface`).
+
+### Remaining manual / content steps
+
+1. `ExitTransform` per ride (needs ride geometry).
+2. Per-seat `PassengerOffset` / hand-IK tuning (visual iteration).
+3. Seats for non-Swing rides (Swing has 34 auto seats; others need manual seats).
+4. Variant rides (Teapot, Ferris Wheel, Carousel, Bumper Cars) — derive from the
+   material variant in `Environment/Blueprint/Ride/Instance/` to preserve colors.
+5. MetaHuman crowd content (characters/collections) + shared ride AnimBP + IK.
 
 
 
