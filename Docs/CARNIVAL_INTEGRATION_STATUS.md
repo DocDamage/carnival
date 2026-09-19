@@ -257,6 +257,7 @@ All 8 rides present in `LV_Carnival` are now derived, wired, and instantiated:
 | Circus | `BP_Circus_Carnival` | (root) | 8 | manual |
 | Haunted House | `BP_HauntedHouse_Carnival` | (root) | 8 | manual |
 | Hot Air Balloon | `BP_HotAirBalloon_Carnival` (×10) | (root) | 8 | manual |
+| Teapot | `BP_Teapot_Carnival` (SunshineShimmer) | `SM_Teapot_Ride_Platform4` | 8 | manual |
 
 Reproduce after a fresh clone (in order): `Scripts/wire_ride.py`,
 `Scripts/instantiate_ride.py`, `Scripts/place_queue_points.py`.
@@ -276,8 +277,8 @@ Plugin additions since the first-ride pass:
 1. `ExitTransform` per ride (needs ride geometry).
 2. Per-seat `PassengerOffset` / hand-IK tuning (visual iteration).
 3. Seats for non-Swing rides (Swing has 34 auto seats; others need manual seats).
-4. Variant rides (Teapot, Ferris Wheel, Carousel, Bumper Cars) — derive from the
-   material variant in `Environment/Blueprint/Ride/Instance/` to preserve colors.
+4. Ferris Wheel + Carousel (live in `Lv_LightingDay/Night/NightSnow` sub-levels, not
+   `LV_Carnival`) and Bumper Cars (deferred arena gameplay) remain unwired.
 5. MetaHuman crowd content (characters/collections) + shared ride AnimBP + IK.
 
 

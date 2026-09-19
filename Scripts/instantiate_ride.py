@@ -22,6 +22,7 @@ RIDES = [
     ("Circus_Ride", "/Game/Carnival/Rides/BP_Circus_Carnival"),
     ("HauntedHouse_Ride", "/Game/Carnival/Rides/BP_HauntedHouse_Carnival"),
     ("HotairBalloon_Ride", "/Game/Carnival/Rides/BP_HotAirBalloon_Carnival"),
+    ("Teapot_Ride_01a_SunshineShimmer", "/Game/Carnival/Rides/BP_Teapot_Carnival"),
 ]
 DESTROY_ORIGINAL = True
 

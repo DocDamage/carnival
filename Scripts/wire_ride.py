@@ -78,6 +78,12 @@ RIDES = {
         "motion_source": None,
         "seat_mesh_pattern": None,
     },
+    "Teapot": {
+        "output": "BP_Teapot_Carnival",
+        "parent": "/Game/Creepwood_Carnival_Meshingun/Environment/Blueprint/Ride/Instance/BP_Teapot_Ride_01a_SunshineShimmer",
+        "motion_source": "SM_Teapot_Ride_Platform4",
+        "seat_mesh_pattern": None,
+    },
 }
 
 

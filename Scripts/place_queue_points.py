@@ -23,6 +23,7 @@ RIDES = [
     ("Circus", "Circus_Carnival"),
     ("HauntedHouse", "HauntedHouse_Carnival"),
     ("HotAirBalloon", "HotAirBalloon_Carnival"),
+    ("Teapot", "Teapot_Carnival"),
 ]
 QUEUE_COUNT = 8
 QUEUE_SPACING = 120.0        # cm between consecutive points
