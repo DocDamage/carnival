@@ -8,14 +8,14 @@ built on the purchased Creepwood Wonderland environment.
 - Unreal Engine: **5.8.2** (`C:\Program Files\UE_5.8`, `++UE5+Release-5.8`, changelist 56702186)
 - Toolchain: Visual Studio 2022 BuildTools 14.44 + Windows 10 SDK 10.0.26100
 - Platform: Windows (x64)
-- Project: `E:\Carvival\CarnivalGame\CarnivalGame.uproject`
+- Project: `F:\Carnival\CarnivalGame.uproject`
 - Game module: `CarnivalGame` (minimal C++ host module)
-- Plugin location: `E:\Carvival\CarnivalGame\Plugins\CarnivalMetaHumanKit\`
+- Plugin location: `F:\Carnival\Plugins\CarnivalMetaHumanKit\`
 
 ## Creepwood content
 
-- Source (VaultCache extract): `E:\Carvival\THECARNIc9ee0c490dc7V4\data\Content\Creepwood_Carnival_Meshingun`
-- Migrated into project: `E:\Carvival\CarnivalGame\Content\Creepwood_Carnival_Meshingun` (plain copy; object paths preserved under `/Game/Creepwood_Carnival_Meshingun`)
+- Source (VaultCache extract): `C:\EpicVaultCache\VaultCache\THECARNIc9ee0c490dc7V4\data\Content\Creepwood_Carnival_Meshingun`
+- Migrated into project: `F:\Carnival\Content\Creepwood_Carnival_Meshingun` (plain copy; object paths preserved under `/Game/Creepwood_Carnival_Meshingun`)
 - Asset count: ~2263 `.uasset`/`.umap` files, ~15.7 GB
 
 ### Showcase map

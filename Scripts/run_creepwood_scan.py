@@ -14,8 +14,10 @@ import traceback
 import unreal
 
 LOG = []
-KIT_SCRIPTS = r"E:\Carvival\CarnivalGame\Plugins\CarnivalMetaHumanKit\Scripts"
-PROJECT_SCRIPTS = r"E:\Carvival\CarnivalGame\Scripts"
+# Derive script folders from the live project directory (portable across machines/drives).
+PROJECT_DIR = unreal.Paths.project_dir()
+KIT_SCRIPTS = os.path.join(PROJECT_DIR, "Plugins", "CarnivalMetaHumanKit", "Scripts")
+PROJECT_SCRIPTS = os.path.join(PROJECT_DIR, "Scripts")
 
 
 def log(msg):

@@ -8,6 +8,7 @@ Run headlessly:
     UnrealEditor.exe "CarnivalGame.uproject" -unattended -nullrhi -nosplash
         -ExecutePythonScript="<this file>" -ExecCmds="quit"
 """
+import os
 import re
 
 import unreal
@@ -16,9 +17,10 @@ SDFL = unreal.SubobjectDataBlueprintFunctionLibrary
 RIDE_PATH = "/Game/Carnival/Rides"
 
 COMPONENTS = [
-    ("CarnivalRideController", "/Script/CarnivalPopulation.CarnivalRideControllerComponent"),
-    ("CarnivalRideMotion", "/Script/CarnivalPopulation.CarnivalRideMotionComponent"),
-    ("CarnivalRideQueue", "/Script/CarnivalPopulation.CarnivalRideQueueComponent"),
+    # (subobject name, class path, set RideId)
+    ("CarnivalRideController", "/Script/CarnivalPopulation.CarnivalRideControllerComponent", True),
+    ("CarnivalRideMotion", "/Script/CarnivalPopulation.CarnivalRideMotionComponent", False),
+    ("CarnivalRideQueue", "/Script/CarnivalPopulation.CarnivalRideQueueComponent", True),
 ]
 SEAT_CLASS_PATH = "/Script/CarnivalPopulation.CarnivalRideSeatComponent"
 SEAT_CLASS_NAME = "CarnivalRideSeatComponent"
@@ -69,6 +71,19 @@ def _delete_all_seats(sds, bp, actor_handle):
     return deleted
 
 
+def _remove_asset_files(asset_path):
+    """Delete the .uasset/.uexp files for a /Game asset path directly on disk."""
+    rel = asset_path[len("/Game/"):]
+    base = os.path.join(unreal.Paths.project_content_dir(), rel)
+    removed = []
+    for ext in (".uasset", ".uexp"):
+        p = base + ext
+        if os.path.exists(p):
+            os.remove(p)
+            removed.append(os.path.basename(p))
+    return removed
+
+
 def wire(ride_id):
     cfg = RIDES[ride_id]
     sds = unreal.get_engine_subsystem(unreal.SubobjectDataSubsystem)
@@ -76,8 +91,19 @@ def wire(ride_id):
     # Delete existing output asset (idempotent rebuild).
     bp_path = "%s/%s" % (RIDE_PATH, cfg["output"])
     if unreal.EditorAssetLibrary.does_asset_exist(bp_path):
-        unreal.EditorAssetLibrary.delete_asset(bp_path)
-        log("[%s] deleted existing %s" % (ride_id, cfg["output"]))
+        # The committed Blueprints may lack their .uexp companion, which makes the
+        # editor delete API fail to load+delete them. Remove the files directly on
+        # disk, then force GC so the in-memory UPackage is released before recreate.
+        try:
+            unreal.EditorAssetLibrary.delete_asset(bp_path)
+        except Exception as exc:
+            log("[%s] delete_asset failed: %s" % (ride_id, exc))
+        removed = _remove_asset_files(bp_path)
+        try:
+            unreal.SystemLibrary.collect_garbage()
+        except Exception:
+            pass
+        log("[%s] removed existing %s (%s)" % (ride_id, cfg["output"], ", ".join(removed) or "none"))
 
     # Derive child Blueprint.
     parent = unreal.load_asset(cfg["parent"])
@@ -98,12 +124,20 @@ def wire(ride_id):
         return False
 
     # Add controller/motion/queue.
-    for name, cls_path in COMPONENTS:
+    for name, cls_path, set_ride_id in COMPONENTS:
         cls = unreal.load_object(None, cls_path)
         nh, fail = sds.add_new_subobject(unreal.AddNewSubobjectParams(actor_handle, cls, bp))
         if nh is not None:
             sds.rename_subobject(handle=nh, new_name=unreal.Text(name))
             log("[%s] added %s" % (ride_id, name))
+            if set_ride_id:
+                comp = _obj(nh)
+                if comp is not None and hasattr(comp, "set_editor_property"):
+                    try:
+                        comp.set_editor_property("RideId", ride_id)
+                        log("[%s] set RideId=%s on %s" % (ride_id, ride_id, name))
+                    except Exception as exc:
+                        log("[%s] set RideId failed on %s: %s" % (ride_id, name, exc))
         else:
             log("[%s] add %s failed: %s" % (ride_id, name, fail))
 
@@ -147,8 +181,8 @@ def wire(ride_id):
 
 
 def main():
-    ride_id = "Swing"  # change to "PirateShip" for components-only wiring
-    wire(ride_id)
+    for ride_id in RIDES:
+        wire(ride_id)
     try:
         unreal.SystemLibrary.quit_editor()
     except Exception:
