@@ -11,13 +11,28 @@ Build/
 .vs/
 .vsconfig
 .idea/
+.vscode/
 Automation_*.sln*
 
 # Python cache
 __pycache__/
 *.pyc
 
-# Purchased third-party Creepwood content — licensed, do NOT redistribute.
-# Add your own licensed copy into Content/Creepwood_Carnival_Meshingun/ before opening.
+# Raw downloaded asset archives from Fab / Marketplace
+Assets/
+DrivableMarsRoverCars/
+
+# Purchased third-party licensed content — licensed, do NOT redistribute.
 Content/Creepwood_Carnival_Meshingun/
+Content/FreeAnimationLibrary/
+Content/Gladiator_Arena/
+Content/LightHouse_Meshingun/
+Content/Mansion/
+Content/Mars_Futuristic_Cars/
+Content/Medieval_Castle/
+Content/RamsterZ_FreeAnims_Volume1/
+Content/SmokePack/
+Content/Town/
+Content/__ExternalActors__/
+Content/__ExternalObjects__/
 

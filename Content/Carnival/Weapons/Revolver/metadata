@@ -1,0 +1,162 @@
+{
+	"assetNamespace": "fab",
+	"listing":
+	{
+		"averageRating": 5,
+		"createdAt": "",
+		"description": "<h4>Enjoy Aurora's Blaze, free revolver from Tesseract Assets.<br><br><span class=\"fabkit-prose-color--yellow\">if you like this gun, please have a look at our</span> <a target=\"_blank\" href=\"https://www.fab.com/listings/a6823dd6-7109-4789-a54d-21bee017f974\" rel=\"noopener noreferrer nofollow\">Revolver Pack </a></h4><p></p><p><a target=\"_blank\" href=\"https://sketchfab.com/3d-models/tesseract--revolver-1ee000db80e1475e9d7df68ad3bef6d2\" rel=\"noopener noreferrer nofollow\">Sketchfab Preview</a></p><p></p><p>Optimized topology </p><p>3,2k triangles</p><p>4k textures.</p><p>Normal map is OpenGL mode, for UE5, you should invert it in material</p><p></p><h4><span class=\"fabkit-prose-color--yellow\">please check our store : </span><a target=\"_blank\" href=\"https://www.fab.com/sellers/Tesseract%20%20Assets?lang=en\" rel=\"noopener noreferrer nofollow\">Tesseract Assets </a></h4>",
+		"isAiForbidden": true,
+		"isAiGenerated": false,
+		"lastUpdatedAt": "",
+		"listingType": "3d-model",
+		"media": "https://media.fab.com/image_previews/gallery_images/3cad827a-2fc9-4f46-9f90-065060e41cc9/e6d33490-312c-4da0-b957-a9dc2c4b051c.png",
+		"publishedAt": "2026-07-31T11:51:46.269774Z",
+		"reviewCount": 2,
+		"thumbnail": "https://media.fab.com/image_previews/gallery_images/8c564e6b-6f77-4c9d-bb0d-bed4fa775422/332bd529-0b28-4710-a9f4-8d38b2d02a0a.png",
+		"title": "Free Revolver / Handcanon",
+		"uid": "89f1b307-8675-4eef-b706-6718105468c4",
+		"updatedAt": "",
+		"user":
+		{
+			"coverImageUrl": "https://cdn1.epicgames.com/fab/seller/o-l3ncjmeqb8jcv8bhzx8sl9ug5arqat/cover/52c895f2.png",
+			"profileImageUrl": "https://cdn1.epicgames.com/fab/seller/o-l3ncjmeqb8jcv8bhzx8sl9ug5arqat/profile/d72e7509.jpg",
+			"sellerName": "Tesseract  Assets",
+			"uid": "6367a8fb-a034-47fe-99f3-dc384e4f1895"
+		},
+		"tags": [
+			{
+				"name": "Pbr",
+				"slug": "pbr",
+				"uid": "080edd3b-d10a-4f32-ace2-30f5baa480dc"
+			},
+			{
+				"name": "Postapocalyptic",
+				"slug": "postapocalyptic",
+				"uid": "0f89b929-9f95-43cf-8255-d9f5cf2139ad"
+			},
+			{
+				"name": "Handcannon",
+				"slug": "handcannon",
+				"uid": "1ac645e2-b1ae-4985-ba25-4669ce51ec6d"
+			},
+			{
+				"name": "Revolver",
+				"slug": "revolver",
+				"uid": "4457ddae-5b43-4474-b976-7c7e6c19fc02"
+			},
+			{
+				"name": "Lowpoly",
+				"slug": "lowpoly",
+				"uid": "451806dc-649e-43b7-9c2e-a54485de14b6"
+			},
+			{
+				"name": "Scifi",
+				"slug": "scifi",
+				"uid": "50945d2d-b4f5-4e56-bda9-b81d5722599e"
+			},
+			{
+				"name": "Firearm",
+				"slug": "firearm",
+				"uid": "54c8f6dd-fce8-480f-b482-d07ac386b875"
+			},
+			{
+				"name": "Fantasy",
+				"slug": "fantasy",
+				"uid": "5c48e966-39f9-4b98-9803-78335e942570"
+			},
+			{
+				"name": "Pistol",
+				"slug": "pistol",
+				"uid": "6d1a500a-998a-4b84-ab20-276745dc79f1"
+			},
+			{
+				"name": "Steampunk",
+				"slug": "steampunk",
+				"uid": "74887967-08b9-4e7b-b032-1727c7bec0c8"
+			},
+			{
+				"name": "Realistic",
+				"slug": "realistic",
+				"uid": "93b0d3f1-a96c-4d68-9d44-69a313519e32"
+			},
+			{
+				"name": "Shotgun",
+				"slug": "shotgun",
+				"uid": "ae9a4b15-7de3-4a21-976f-71365b33e14d"
+			},
+			{
+				"name": "Stylized",
+				"slug": "stylized",
+				"uid": "b584e222-c5bf-43b3-b9ed-f937eaf169c1"
+			},
+			{
+				"name": "Weapon",
+				"slug": "weapon",
+				"uid": "cb5288be-1972-4807-9f2a-5f33ddffd407"
+			},
+			{
+				"name": "Victorian",
+				"slug": "victorian",
+				"uid": "f5815f31-6e69-45cf-9e3e-292686e0045d"
+			},
+			{
+				"name": "Cyberpunk",
+				"slug": "cyberpunk",
+				"uid": "f7463a48-491f-4864-8690-6e6dcc98c073"
+			}
+		],
+		"category":
+		{
+			"name": "Guns",
+			"path": "weapons-combat/guns",
+			"slug": "weapons-combat--guns",
+			"uid": "a6b2e44b-eb66-4ee8-a5ad-18036d7d1688"
+		},
+		"assetFormats": [
+			{
+				"assetFormatType":
+				{
+					"name": "GLB",
+					"groupName": "3D Exchange Formats",
+					"code": "glb",
+					"icon": "cube",
+					"extensions": [
+						"glb"
+					]
+				}
+			},
+			{
+				"assetFormatType":
+				{
+					"name": "Converted Files",
+					"groupName": "",
+					"code": "converted-files",
+					"icon": "cube",
+					"extensions": [
+						"gltf",
+						"glb",
+						"usdz"
+					]
+				}
+			}
+		],
+		"_PluginMetas":
+		{
+			"apiDataVersion": "0.0.1",
+			"entitlementUid": "fcdced08-c8f6-4989-93b9-7c8b514c576f",
+			"cacheSize": 0,
+			"downloaded": []
+		}
+	},
+	"target": "unity",
+	"quality": "",
+	"format": "glb",
+	"fileId": "cc398647-2944-4f83-9b38-257c19dce58b",
+	"platformIncluded": "",
+	"distributionPointBaseUrls": [],
+	"distributionMethod": "",
+	"entitlementUid": "fcdced08-c8f6-4989-93b9-7c8b514c576f",
+	"invertedNormal": false,
+	"isConverted": false,
+	"isQuixel": false
+}
