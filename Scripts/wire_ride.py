@@ -17,10 +17,10 @@ SDFL = unreal.SubobjectDataBlueprintFunctionLibrary
 RIDE_PATH = "/Game/Carnival/Rides"
 
 COMPONENTS = [
-    # (subobject name, class path, set RideId)
-    ("CarnivalRideController", "/Script/CarnivalPopulation.CarnivalRideControllerComponent", True),
-    ("CarnivalRideMotion", "/Script/CarnivalPopulation.CarnivalRideMotionComponent", False),
-    ("CarnivalRideQueue", "/Script/CarnivalPopulation.CarnivalRideQueueComponent", True),
+    # (subobject name, class path, property to set)
+    ("CarnivalRideController", "/Script/CarnivalPopulation.CarnivalRideControllerComponent", "RideId"),
+    ("CarnivalRideMotion", "/Script/CarnivalPopulation.CarnivalRideMotionComponent", "MotionSourceName"),
+    ("CarnivalRideQueue", "/Script/CarnivalPopulation.CarnivalRideQueueComponent", "RideId"),
 ]
 SEAT_CLASS_PATH = "/Script/CarnivalPopulation.CarnivalRideSeatComponent"
 SEAT_CLASS_NAME = "CarnivalRideSeatComponent"
@@ -30,6 +30,7 @@ RIDES = {
     "Swing": {
         "output": "BP_Swing_Carnival",
         "parent": "/Game/Creepwood_Carnival_Meshingun/Environment/Blueprint/Ride/BP_Swing_Ride_01a",
+        "motion_source": "MainAnchor",
         "seat_mesh_pattern": "SM_Swing_Chair",
         "seat_exclude": "Chain",
         "seat_number_regex": r"Chair(\d+)",
@@ -37,6 +38,7 @@ RIDES = {
     "PirateShip": {
         "output": "BP_PirateShip_Carnival",
         "parent": "/Game/Creepwood_Carnival_Meshingun/Environment/Blueprint/Ride/BP_PirateShip_Ride_01a",
+        "motion_source": "SM_Mainboat_PirateRide",
         # Pirate Ship has row benches (not discrete chair meshes): seats are placed manually.
         "seat_mesh_pattern": None,
     },
@@ -124,20 +126,21 @@ def wire(ride_id):
         return False
 
     # Add controller/motion/queue.
-    for name, cls_path, set_ride_id in COMPONENTS:
+    for name, cls_path, prop_name in COMPONENTS:
         cls = unreal.load_object(None, cls_path)
         nh, fail = sds.add_new_subobject(unreal.AddNewSubobjectParams(actor_handle, cls, bp))
         if nh is not None:
             sds.rename_subobject(handle=nh, new_name=unreal.Text(name))
             log("[%s] added %s" % (ride_id, name))
-            if set_ride_id:
+            prop_value = ride_id if prop_name == "RideId" else cfg.get("motion_source")
+            if prop_value:
                 comp = _obj(nh)
                 if comp is not None and hasattr(comp, "set_editor_property"):
                     try:
-                        comp.set_editor_property("RideId", ride_id)
-                        log("[%s] set RideId=%s on %s" % (ride_id, ride_id, name))
+                        comp.set_editor_property(prop_name, prop_value)
+                        log("[%s] set %s=%s on %s" % (ride_id, prop_name, prop_value, name))
                     except Exception as exc:
-                        log("[%s] set RideId failed on %s: %s" % (ride_id, name, exc))
+                        log("[%s] set %s failed on %s: %s" % (ride_id, prop_name, name, exc))
         else:
             log("[%s] add %s failed: %s" % (ride_id, name, fail))
 

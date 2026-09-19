@@ -26,6 +26,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Carnival|Motion", meta=(ClampMin="1.0"))
     float AngularSpeedForMaxIntensity = 180.0f;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Carnival|Motion", meta=(ToolTip="Name of the owner actor's SceneComponent to sample for motion telemetry. Leave None to use the actor root."))
+    FName MotionSourceName = NAME_None;
+
     UPROPERTY(BlueprintAssignable, Category="Carnival|Motion")
     FCarnivalTelemetryUpdatedSignature OnTelemetryUpdated;
 

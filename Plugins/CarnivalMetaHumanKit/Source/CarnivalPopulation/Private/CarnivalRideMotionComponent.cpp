@@ -1,4 +1,5 @@
 #include "CarnivalRideMotionComponent.h"
+#include "Components/ActorComponent.h"
 #include "Components/SceneComponent.h"
 #include "GameFramework/Actor.h"
 
@@ -10,9 +11,34 @@ UCarnivalRideMotionComponent::UCarnivalRideMotionComponent()
 void UCarnivalRideMotionComponent::BeginPlay()
 {
     Super::BeginPlay();
+
     if (!IsValid(MotionSource) && IsValid(GetOwner()))
     {
-        MotionSource = GetOwner()->GetRootComponent();
+        AActor* Owner = GetOwner();
+
+        // Prefer a named SceneComponent on the owner (e.g. "MainAnchor" on the Swing).
+        if (!MotionSourceName.IsNone())
+        {
+            TArray<UActorComponent*> Components;
+            Owner->GetComponents(Components);
+            for (UActorComponent* Component : Components)
+            {
+                if (Component && Component->GetFName() == MotionSourceName)
+                {
+                    if (USceneComponent* Scene = Cast<USceneComponent>(Component))
+                    {
+                        MotionSource = Scene;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Fall back to the actor root if no named source matched.
+        if (!IsValid(MotionSource))
+        {
+            MotionSource = Owner->GetRootComponent();
+        }
     }
 }
 
