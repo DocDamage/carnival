@@ -22,7 +22,6 @@ enum class ECarnivalLocomotionState : uint8
 	LadderClimbing		UMETA(DisplayName = "Ladder Climbing"),
 	LedgeClimbing		UMETA(DisplayName = "Ledge Climbing"),
 	Swimming			UMETA(DisplayName = "Swimming"),
-	RidingMotorcycle	UMETA(DisplayName = "Riding Motorcycle")
 	RidingMotorcycle	UMETA(DisplayName = "Riding Motorcycle"),
 	DrivingBoat			UMETA(DisplayName = "Driving Boat"),
 	PilotingHovercraft	UMETA(DisplayName = "Piloting Hovercraft")
@@ -46,4 +45,3 @@ enum class EMotorcyclePhysicsMode : uint8
 	Arcade			UMETA(DisplayName = "Arcade (Responsive / No-Tip)"),
 	ChaosPhysics	UMETA(DisplayName = "Chaos Physics (Full 2-Wheel Simulation)")
 };
-

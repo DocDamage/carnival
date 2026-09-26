@@ -13,6 +13,18 @@
       "Name": "CarnivalPopulation",
       "Type": "Runtime",
       "LoadingPhase": "Default"
+    },
+    {
+      "Name": "CarnivalPopulationEditor",
+      "Type": "Editor",
+      "LoadingPhase": "Default"
     }
+  ],
+  "Plugins": [
+    { "Name": "MetaHumanCharacter", "Enabled": true },
+    { "Name": "MetaHumanCrowd", "Enabled": true },
+    { "Name": "MassGameplay", "Enabled": true },
+    { "Name": "MassCrowd", "Enabled": true },
+    { "Name": "ZoneGraph", "Enabled": true }
   ]
 }

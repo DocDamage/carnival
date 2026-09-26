@@ -1,4 +1,5 @@
 #include "CarnivalRideQueueComponent.h"
+#include "Engine/World.h"
 #include "CarnivalQueuePoint.h"
 #include "Kismet/GameplayStatics.h"
 

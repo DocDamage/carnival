@@ -310,4 +310,3 @@ void ACarnivalMotorcycle::SetupPlayerInputComponent(UInputComponent* PlayerInput
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 }
-

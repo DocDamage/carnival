@@ -597,4 +597,3 @@ void ACarnivalPlayerCharacter::SetupPlayerInputComponent(UInputComponent* Player
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 }
-

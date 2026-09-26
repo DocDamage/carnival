@@ -1,4 +1,5 @@
 #include "CarnivalRideSeatComponent.h"
+#include "GameFramework/Actor.h"
 
 UCarnivalRideSeatComponent::UCarnivalRideSeatComponent()
 {
@@ -7,7 +8,7 @@ UCarnivalRideSeatComponent::UCarnivalRideSeatComponent()
 
 bool UCarnivalRideSeatComponent::IsOccupied() const
 {
-    return IsValid(Occupant);
+    return IsValid(Occupant.Get());
 }
 
 AActor* UCarnivalRideSeatComponent::GetOccupant() const
