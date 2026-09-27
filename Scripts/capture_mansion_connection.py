@@ -9,6 +9,7 @@ world=unreal.EditorLoadingAndSavingUtils.load_map(CARNIVAL)
 eas=unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
 camera=eas.spawn_actor_from_class(unreal.CameraActor,unreal.Vector(0,0,10000))
 camera.camera_component.set_editor_property('field_of_view',65.0)
+viewport=unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
 cases=[('01_Carnival_Trail',(-50700,-500,820),(-5,COAST_YAW,0)),
        ('02_Railroad_Bridge',(-10200,-50,635),(-1,COAST_YAW,0)),
        ('03_Wetlands_Crossing',(0,-17000,15000),(-40,COAST_YAW+90,0)),
@@ -26,17 +27,27 @@ def tick(delta):
     try:
         if time.monotonic()<state['deadline']:return
         if state['phase']=='shot':
-            if not state['task'].is_task_done():return
+            path=images/(cases[state['i']][0]+'.png')
+            if not path.exists():
+                if time.monotonic()>state['timeout']:raise RuntimeError('Screenshot timed out: '+str(path))
+                return
             report['images'].append(str(images/(cases[state['i']][0]+'.png')));state['phase']='next'
         if state['phase']=='capture':
-            state['task']=unreal.AutomationLibrary.take_high_res_screenshot(1600,1000,str(images/(cases[state['i']][0]+'.png')),camera)
-            state['phase']='shot';return
+            path=images/(cases[state['i']][0]+'.png')
+            if path.exists():path.unlink()
+            # The automation helper waits for all unrelated asset compilation.
+            # Capture the settled viewport directly instead.
+            unreal.SystemLibrary.execute_console_command(world,'HighResShot 1600x1000 filename="'+str(path).replace('\\','/')+'"')
+            state.update(phase='shot',timeout=time.monotonic()+90);return
         if state['phase']=='next':
             state['i']+=1
             if state['i']>=len(cases):done();return
             name,p,r=cases[state['i']]
             camera.set_actor_location(unreal.Vector(*world_point(p)),False,True)
             camera.set_actor_rotation(unreal.Rotator(pitch=r[0],yaw=r[1],roll=r[2]),False)
+            viewport.set_level_viewport_camera_info(camera.get_actor_location(),camera.get_actor_rotation())
+            unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).editor_set_game_view(True)
+            (OUT/'Capture_Live.json').write_text(json.dumps({'case':name,'phase':'settling'}))
             state.update(phase='capture',deadline=time.monotonic()+5)
     except Exception:
         report['error']=traceback.format_exc();done()

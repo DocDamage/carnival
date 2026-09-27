@@ -9,6 +9,65 @@
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Engine/World.h"
 #include "InstancedFoliageActor.h"
+#include "Engine/Level.h"
+#include "Engine/LevelScriptBlueprint.h"
+#include "EdGraph/EdGraph.h"
+#include "Kismet2/BlueprintEditorUtils.h"
+#include "Kismet2/KismetEditorUtilities.h"
+#include "Components/BoxComponent.h"
+#include "Components/PostProcessComponent.h"
+
+AActor* UCarnivalWorldEditorLibrary::CreateWetlandsPostProcess(UWorld* World, FVector Center, FVector Extent)
+{
+    if (!World) return nullptr;
+    AActor* Actor = World->SpawnActor<AActor>();
+    Actor->SetActorLabel(TEXT("Wetlands_ViewClarity"));
+    UBoxComponent* Bounds = NewObject<UBoxComponent>(Actor, TEXT("Bounds"), RF_Transactional);
+    Actor->AddInstanceComponent(Bounds);
+    Actor->SetRootComponent(Bounds);
+    Bounds->SetBoxExtent(Extent);
+    Bounds->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    Bounds->RegisterComponent();
+    Actor->SetActorLocation(Center);
+    UPostProcessComponent* Process = NewObject<UPostProcessComponent>(Actor, TEXT("PostProcess"), RF_Transactional);
+    Actor->AddInstanceComponent(Process);
+    Process->SetupAttachment(Bounds);
+    Process->bUnbound = false;
+    Process->Priority = 50.0f;
+    Process->BlendRadius = 1500.0f;
+    Process->Settings.bOverride_LensFlareIntensity = true;
+    Process->Settings.LensFlareIntensity = 0.0f;
+    Process->Settings.bOverride_BloomIntensity = true;
+    Process->Settings.BloomIntensity = 0.2f;
+    Process->Settings.bOverride_SceneFringeIntensity = true;
+    Process->Settings.SceneFringeIntensity = 0.0f;
+    Process->RegisterComponent();
+    Actor->MarkPackageDirty();
+    return Actor;
+}
+
+int32 UCarnivalWorldEditorLibrary::ClearConnectedLevelDemoEvents(UWorld* World)
+{
+    if (!World || !World->GetOutermost()->GetName().StartsWith(TEXT("/Game/Carnival/World/Levels/"))) return 0;
+    ULevelScriptBlueprint* Blueprint = World->PersistentLevel->GetLevelScriptBlueprint(true);
+    if (!Blueprint) return 0;
+    Blueprint->Modify();
+    int32 Removed = 0;
+    for (UEdGraph* Graph : Blueprint->UbergraphPages)
+    {
+        Graph->Modify();
+        const auto Nodes = Graph->Nodes;
+        for (UEdGraphNode* Node : Nodes)
+        {
+            FBlueprintEditorUtils::RemoveNode(Blueprint, Node, true);
+            ++Removed;
+        }
+    }
+    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+    FKismetEditorUtilities::CompileBlueprint(Blueprint);
+    World->MarkPackageDirty();
+    return Removed;
+}
 
 TArray<float> UCarnivalWorldEditorLibrary::SampleLandscapeHeights(AActor* Actor, const TArray<FVector>& Positions)
 {

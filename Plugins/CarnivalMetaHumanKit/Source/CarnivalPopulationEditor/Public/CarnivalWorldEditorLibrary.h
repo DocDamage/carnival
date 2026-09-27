@@ -10,6 +10,14 @@ class CARNIVALPOPULATIONEDITOR_API UCarnivalWorldEditorLibrary : public UBluepri
 {
     GENERATED_BODY()
 public:
+    /** Clear demo events only in generated connected-world level copies. */
+    UFUNCTION(BlueprintCallable, Category="Carnival|World")
+    static int32 ClearConnectedLevelDemoEvents(UWorld* World);
+
+    /** Reduce cinematic glare within the connected approach, with soft borders. */
+    UFUNCTION(BlueprintCallable, Category="Carnival|World")
+    static AActor* CreateWetlandsPostProcess(UWorld* World, FVector Center, FVector Extent);
+
     UFUNCTION(BlueprintCallable, Category="Carnival|World")
     static TArray<float> SampleLandscapeHeights(AActor* LandscapeActor, const TArray<FVector>& WorldPositions);
 

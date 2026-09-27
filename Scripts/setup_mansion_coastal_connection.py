@@ -46,9 +46,10 @@ world=unreal.EditorLoadingAndSavingUtils.load_map('/Game/RailBridge/Maps/testmap
 assert unreal.EditorLoadingAndSavingUtils.save_map(world,COAST)
 world=unreal.EditorLoadingAndSavingUtils.load_map(COAST)
 assert world.get_path_name().startswith(COAST+'.')
+unreal.CarnivalWorldEditorLibrary.clear_connected_level_demo_events(world)
 remove_types={'PlayerStart','FirstPersonCharacter_C','BP_Train_C','BlockingVolume','CineCameraActor','CameraActor','SkyLight','DirectionalLight','SkyAtmosphere','VolumetricCloud','ExponentialHeightFog','PostProcessVolume'}
 for a in list(eas.get_all_level_actors()):
-    if a.get_class().get_name() in remove_types or a.get_actor_label()=='Floor':
+    if a.get_class().get_name() in remove_types or a.get_actor_label() in {'Floor','SM_SkySphere2'}:
         report['removed'].append({'label':a.get_actor_label(),'class':a.get_class().get_name()});eas.destroy_actor(a)
 land=next(a for a in eas.get_all_level_actors() if isinstance(a,unreal.Landscape))
 world.get_world_settings().set_editor_property('default_game_mode',None)

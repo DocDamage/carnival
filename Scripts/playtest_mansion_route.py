@@ -4,10 +4,19 @@ import unreal
 sys.path.insert(0,r'F:\Carnival\Scripts')
 from mansion_route_config import *
 world=unreal.EditorLoadingAndSavingUtils.load_map(CARNIVAL)
+# Route traversal does not require the unrelated crowd's MetaHuman outfit builds.
+# Remove its spawner only in this unsaved test world to keep the test bounded.
+eas=unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+excluded=[]
+for actor in list(eas.get_all_level_actors()):
+    if actor.get_class().get_name()=='MetaHumanMassSpawner':
+        excluded.append(actor.get_actor_label());eas.destroy_actor(actor)
 levels=unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
 levels.editor_request_begin_play()
 route=[unreal.Vector(*p) for p in route_manifest()['route_world']]
-report={'success':False,'map':CARNIVAL,'tests':[]}
+report={'success':False,'map':CARNIVAL,'tests':[],'excluded_unrelated_crowd_spawners':excluded}
+(OUT/'Route_Playtest.json').write_text(json.dumps(report,indent=2))
+(OUT/'Route_Playtest_Live.json').write_text(json.dumps({'mode':'setup'}))
 state={'phase':'setup','busy':False,'deadline':time.monotonic()+90,'index':1,'last_index':0,'last_progress':0,'ticks':0}
 def xy(a,b):return math.hypot(a.x-b.x,a.y-b.y)
 def clock(game):return unreal.GameplayStatics.get_time_seconds(game)
