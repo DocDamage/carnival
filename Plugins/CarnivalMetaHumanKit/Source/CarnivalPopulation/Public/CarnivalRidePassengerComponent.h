@@ -65,13 +65,27 @@ public:
     UCarnivalRideSeatComponent* GetCurrentSeat() const;
 
     UFUNCTION(BlueprintPure, Category="Carnival|Passenger")
+    AActor* GetCurrentRide() const { return CurrentRide.Get(); }
+
+    UFUNCTION(BlueprintPure, Category="Carnival|Passenger")
+    FTransform GetBoardingTransform() const { return BoardingTransform; }
+
+    UFUNCTION(BlueprintPure, Category="Carnival|Passenger")
     ECarnivalRideReaction GetCurrentReaction() const;
 
 protected:
     virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 private:
+    bool bBoarded = false;
+    bool bSavedCollision = true;
+    bool bSavedOrientToMovement = true;
+    bool bSavedUseControllerYaw = false;
+    uint8 SavedMovementMode = 1;
+    uint8 SavedCustomMovementMode = 0;
+    FTransform BoardingTransform;
     ECarnivalRideReaction ChooseReaction(const FCarnivalRideTelemetry& Telemetry, float& OutStrength) const;
     void SetReaction(ECarnivalRideReaction NewReaction, float Strength, const FCarnivalRideTelemetry& Telemetry);
 

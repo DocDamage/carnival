@@ -6,12 +6,35 @@
 #include "CarnivalPlayerCharacter.h"
 #include "CarnivalMotorcycle.h"
 #include "CarnivalBuildComponent.h"
+#include "CarnivalRideOperationComponent.h"
+#include "InputKeyEventArgs.h"
 #include "Blueprint/UserWidget.h"
 #include "Kismet/GameplayStatics.h"
 
 ACarnivalPlayerController::ACarnivalPlayerController()
 {
 	SettingsMenuWidget = nullptr;
+}
+
+bool ACarnivalPlayerController::InputKey(const FInputKeyEventArgs& Params)
+{
+	// Stick drift should not replace keyboard prompts.
+	if (Params.Event != IE_Released && FMath::Abs(Params.AmountDepressed) > .2)
+		bUsingGamepad = Params.IsGamepad();
+	return Super::InputKey(Params);
+}
+
+void ACarnivalPlayerController::OnUnPossess()
+{
+	if (auto* Bike = Cast<ACarnivalMotorcycle>(GetPawn()))
+	{
+		Bike->InputThrottle(0.f);
+		Bike->InputSteering(0.f);
+		Bike->InputBrake(0.f);
+	}
+	if (auto* CarnivalCharacter = Cast<ACarnivalPlayerCharacter>(GetPawn()))
+		CarnivalCharacter->LeaveRideOperator();
+	Super::OnUnPossess();
 }
 
 void ACarnivalPlayerController::BeginPlay()
@@ -73,6 +96,12 @@ void ACarnivalPlayerController::SetupInputComponent()
 		{
 			EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ACarnivalPlayerController::OnLook);
 		}
+		if (LookStickAction)
+			EnhancedInputComponent->BindAction(LookStickAction, ETriggerEvent::Triggered, this, &ACarnivalPlayerController::OnLookStick);
+		if (ContextInteractAction)
+			EnhancedInputComponent->BindAction(ContextInteractAction, ETriggerEvent::Started, this, &ACarnivalPlayerController::OnContextInteract);
+		if (CancelAction)
+			EnhancedInputComponent->BindAction(CancelAction, ETriggerEvent::Started, this, &ACarnivalPlayerController::OnCancel);
 		if (JumpVaultAction)
 		{
 			EnhancedInputComponent->BindAction(JumpVaultAction, ETriggerEvent::Started, this, &ACarnivalPlayerController::OnJumpVault);
@@ -81,6 +110,7 @@ void ACarnivalPlayerController::SetupInputComponent()
 		{
 			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Started, this, &ACarnivalPlayerController::OnStartSprint);
 			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &ACarnivalPlayerController::OnStopSprint);
+			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Canceled, this, &ACarnivalPlayerController::OnStopSprint);
 		}
 		if (CrouchAction)
 		{
@@ -181,21 +211,27 @@ void ACarnivalPlayerController::SetupInputComponent()
 		if (ThrottleAction)
 		{
 			EnhancedInputComponent->BindAction(ThrottleAction, ETriggerEvent::Triggered, this, &ACarnivalPlayerController::OnThrottle);
+			EnhancedInputComponent->BindAction(ThrottleAction, ETriggerEvent::Completed, this, &ACarnivalPlayerController::OnThrottle);
+			EnhancedInputComponent->BindAction(ThrottleAction, ETriggerEvent::Canceled, this, &ACarnivalPlayerController::OnThrottle);
 		}
 		if (SteerAction)
 		{
 			EnhancedInputComponent->BindAction(SteerAction, ETriggerEvent::Triggered, this, &ACarnivalPlayerController::OnSteer);
+			EnhancedInputComponent->BindAction(SteerAction, ETriggerEvent::Completed, this, &ACarnivalPlayerController::OnSteer);
+			EnhancedInputComponent->BindAction(SteerAction, ETriggerEvent::Canceled, this, &ACarnivalPlayerController::OnSteer);
 		}
 		if (BrakeAction)
 		{
 			EnhancedInputComponent->BindAction(BrakeAction, ETriggerEvent::Triggered, this, &ACarnivalPlayerController::OnBrake);
+			EnhancedInputComponent->BindAction(BrakeAction, ETriggerEvent::Completed, this, &ACarnivalPlayerController::OnBrake);
+			EnhancedInputComponent->BindAction(BrakeAction, ETriggerEvent::Canceled, this, &ACarnivalPlayerController::OnBrake);
 		}
 	}
 }
 
 void ACarnivalPlayerController::OnMove(const FInputActionValue& Value)
 {
-	FVector2D MovementVector = Value.Get<FVector2D>();
+	FVector2D MovementVector = Value.Get<FVector2D>().GetClampedToMaxSize(1.f);
 	if (ACarnivalPlayerCharacter* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()))
 	{
 		Char->MoveForward(MovementVector.Y);
@@ -214,6 +250,8 @@ void ACarnivalPlayerController::OnJumpVault()
 {
 	if (ACarnivalPlayerCharacter* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()))
 	{
+		if (IsValid(Char->OperatingRide)) { Char->OperatingRide->OperatorStop(Char); return; }
+		if (Char->IsUsingRide()) return;
 		if (!Char->TryVaultOrMantle())
 		{
 			Char->Jump();
@@ -225,8 +263,28 @@ void ACarnivalPlayerController::OnStartSprint()
 {
 	if (ACarnivalPlayerCharacter* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()))
 	{
+		if (IsValid(Char->OperatingRide)) { Char->OperatingRide->OperatorStart(Char); return; }
 		Char->StartSprinting();
 	}
+}
+
+void ACarnivalPlayerController::OnLookStick(const FInputActionValue& Value)
+{
+	if (IsLookInputIgnored()) return;
+	const FVector2D Stick = Value.Get<FVector2D>().GetClampedToMaxSize(1.f);
+	const float Scale = StickLookDegreesPerSecond * GetWorld()->GetDeltaSeconds();
+	RotationInput.Yaw += Stick.X * Scale;
+	RotationInput.Pitch += Stick.Y * Scale;
+}
+
+void ACarnivalPlayerController::OnContextInteract()
+{
+	if (auto* Char = Cast<ACarnivalPlayerCharacter>(GetPawn())) Char->InteractWithRideOperator();
+}
+
+void ACarnivalPlayerController::OnCancel()
+{
+	if (auto* Char = Cast<ACarnivalPlayerCharacter>(GetPawn())) Char->LeaveRideOperator();
 }
 
 void ACarnivalPlayerController::OnStopSprint()
@@ -269,6 +327,7 @@ void ACarnivalPlayerController::OnInteractMount()
 
 void ACarnivalPlayerController::OnAttack()
 {
+	if (auto* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()); Char && Char->IsUsingRide()) return;
 	if (ACarnivalPlayerCharacter* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()))
 	{
 		if (Char->BuildComponent && Char->BuildComponent->bIsBuildModeActive)
@@ -304,6 +363,7 @@ void ACarnivalPlayerController::OnToggleBuild()
 {
 	if (ACarnivalPlayerCharacter* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()))
 	{
+		if (Char->IsUsingRide()) return;
 		if (Char->BuildComponent)
 		{
 			Char->BuildComponent->ToggleBuildMode();
@@ -488,4 +548,3 @@ void ACarnivalPlayerController::SetMotorcyclePhysicsMode(EMotorcyclePhysicsMode 
 		}
 	}
 }
-

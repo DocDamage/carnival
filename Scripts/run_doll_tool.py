@@ -1,6 +1,7 @@
 """Run the installed Unreal/Blender tools with explicit argument lists and logs."""
 import subprocess
 import sys
+import json
 from pathlib import Path
 
 base = Path(r"F:\Carnival")
@@ -20,11 +21,12 @@ elif mode == "build":
     args = [str(dotnet), str(engine / "Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.dll"),
             "CarnivalGameEditor", "Win64", "Development", "-Project=" + str(base / "CarnivalGame.uproject"),
             "-WaitMutex", "-NoHotReloadFromIDE", "-MaxParallelActions=6"]
-elif mode == "test":
+elif mode in ("test", "ride-test"):
     args = [str(engine / "Binaries/Win64/UnrealEditor-Cmd.exe"), str(base / "CarnivalGame.uproject"),
             "/Engine/Maps/Entry", "-unattended", "-nullrhi", "-nosplash", "-nop4", "-NoSound",
-            "-ExecCmds=Automation RunTests Carnival.HauntedDoll", "-TestExit=Automation Test Queue Empty",
-            "-ReportExportPath=" + str(logs / "Automation"), "-abslog=" + str(logs / "Encounter_Test.log")]
+            "-ExecCmds=Automation RunTests " + ("Carnival.Rides" if mode == "ride-test" else "Carnival.HauntedDoll"), "-TestExit=Automation Test Queue Empty",
+            "-ReportExportPath=" + str(logs / ("RideAutomation" if mode == "ride-test" else "Automation")),
+            "-abslog=" + str(logs / ("Ride_Test.log" if mode == "ride-test" else "Encounter_Test.log"))]
 elif mode == "render":
     args = [str(engine / "Binaries/Win64/UnrealEditor-Cmd.exe"), str(base / "CarnivalGame.uproject"),
             "/Engine/Maps/Entry", "-unattended", "-RenderOffscreen", "-nosplash", "-nop4", "-NoSound",
@@ -46,4 +48,9 @@ with log.open("w", encoding="utf-8") as output:
                             creationflags=subprocess.CREATE_NO_WINDOW)
 print(mode, "exit", result.returncode, "log", log, flush=True)
 print(log.read_text(errors="replace")[-1500:])
+if mode in ("test", "ride-test") and result.returncode == 0:
+    report = json.loads((logs / ("RideAutomation" if mode == "ride-test" else "Automation") / "index.json").read_text(encoding="utf-8-sig"))
+    print("Automation:", {key: report.get(key) for key in ("succeeded", "failed", "notRun", "inProcess")})
+    if report.get("failed", 0) or report.get("notRun", 0) or report.get("inProcess", 0) or not report.get("tests"):
+        sys.exit(1)
 sys.exit(result.returncode)

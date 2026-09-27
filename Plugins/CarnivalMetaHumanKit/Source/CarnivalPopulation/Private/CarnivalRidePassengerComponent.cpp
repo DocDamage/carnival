@@ -3,6 +3,8 @@
 #include "CarnivalRideSeatComponent.h"
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 UCarnivalRidePassengerComponent::UCarnivalRidePassengerComponent()
 {
@@ -25,6 +27,12 @@ void UCarnivalRidePassengerComponent::TickComponent(float DeltaTime, ELevelTick 
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
+    if (bBoarded && (!IsValid(CurrentSeat) || !IsValid(CurrentRide)))
+    {
+        UnboardRide(BoardingTransform);
+        return;
+    }
+
     if (bSnapEveryTick && IsValid(CurrentSeat) && IsValid(GetOwner()))
     {
         GetOwner()->SetActorTransform(CurrentSeat->GetPassengerWorldTransform(), false, nullptr, ETeleportType::TeleportPhysics);
@@ -33,11 +41,29 @@ void UCarnivalRidePassengerComponent::TickComponent(float DeltaTime, ELevelTick 
 
 bool UCarnivalRidePassengerComponent::BoardRide(AActor* RideActor, UCarnivalRideSeatComponent* Seat)
 {
-    if (!IsValid(GetOwner()) || !IsValid(RideActor) || !IsValid(Seat) || Seat->IsOccupied() || IsRiding())
+    if (!IsValid(GetOwner()) || !IsValid(RideActor) || !IsValid(Seat)
+        || Seat->GetOwner() != RideActor || Seat->IsOccupied() || bBoarded)
     {
         return false;
     }
 
+    BoardingTransform = GetOwner()->GetActorTransform();
+    bSavedCollision = GetOwner()->GetActorEnableCollision();
+    GetOwner()->SetActorEnableCollision(false);
+    if (ACharacter* Character = Cast<ACharacter>(GetOwner()))
+    {
+        UCharacterMovementComponent* Movement = Character->GetCharacterMovement();
+        SavedMovementMode = Movement->MovementMode;
+        SavedCustomMovementMode = Movement->CustomMovementMode;
+        bSavedOrientToMovement = Movement->bOrientRotationToMovement;
+        bSavedUseControllerYaw = Character->bUseControllerRotationYaw;
+        Movement->StopMovementImmediately();
+        Movement->DisableMovement();
+        Movement->bOrientRotationToMovement = false;
+        Character->bUseControllerRotationYaw = false;
+        Character->StopJumping();
+    }
+    bBoarded = true;
     CurrentRide = RideActor;
     CurrentSeat = Seat;
     Seat->Occupant = GetOwner();
@@ -57,7 +83,7 @@ bool UCarnivalRidePassengerComponent::BoardRide(AActor* RideActor, UCarnivalRide
 
 void UCarnivalRidePassengerComponent::UnboardRide(const FTransform& ExitTransform, bool bDetachKeepWorld)
 {
-    if (!IsRiding() || !IsValid(GetOwner()))
+    if (!bBoarded || !IsValid(GetOwner()))
     {
         return;
     }
@@ -75,6 +101,16 @@ void UCarnivalRidePassengerComponent::UnboardRide(const FTransform& ExitTransfor
 
     CurrentRide = nullptr;
     CurrentSeat = nullptr;
+    bBoarded = false;
+    GetOwner()->SetActorEnableCollision(bSavedCollision);
+    if (ACharacter* Character = Cast<ACharacter>(GetOwner()))
+    {
+        UCharacterMovementComponent* Movement = Character->GetCharacterMovement();
+        Movement->SetMovementMode(static_cast<EMovementMode>(SavedMovementMode), SavedCustomMovementMode);
+        Movement->bOrientRotationToMovement = bSavedOrientToMovement;
+        Character->bUseControllerRotationYaw = bSavedUseControllerYaw;
+        Character->StopJumping();
+    }
     CurrentReaction = ECarnivalRideReaction::Calm;
     LastReactionStrength = 0.0f;
     LastReactionChangeTime = -FLT_MAX;
@@ -85,6 +121,15 @@ void UCarnivalRidePassengerComponent::UnboardRide(const FTransform& ExitTransfor
     {
         ICarnivalPassengerInterface::Execute_CarnivalRideUnboarded(GetOwner(), Ride);
     }
+}
+
+void UCarnivalRidePassengerComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    if (IsValid(CurrentSeat) && CurrentSeat->Occupant == GetOwner())
+    {
+        CurrentSeat->Occupant = nullptr;
+    }
+    Super::EndPlay(EndPlayReason);
 }
 
 void UCarnivalRidePassengerComponent::ApplyRideTelemetry(const FCarnivalRideTelemetry& Telemetry)

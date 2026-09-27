@@ -2,6 +2,8 @@
 
 #include "CarnivalPlayerCharacter.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Animation/AnimSequence.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Camera/CameraComponent.h"
@@ -11,6 +13,10 @@
 #include "CarnivalWeaponBase.h"
 #include "CarnivalBuildComponent.h"
 #include "CarnivalActivityBase.h"
+#include "CarnivalRideAttendant.h"
+#include "CarnivalRidePassengerComponent.h"
+#include "CarnivalRideSeatComponent.h"
+#include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Engine/World.h"
@@ -49,6 +55,7 @@ ACarnivalPlayerCharacter::ACarnivalPlayerCharacter()
 	FollowCamera->bUsePawnControlRotation = false;
 
 	BuildComponent = CreateDefaultSubobject<UCarnivalBuildComponent>(TEXT("BuildComponent"));
+    RidePassenger = CreateDefaultSubobject<UCarnivalRidePassengerComponent>(TEXT("RidePassenger"));
 
 	WalkSpeed = 200.0f;
 	JogSpeed = 450.0f;
@@ -67,6 +74,8 @@ ACarnivalPlayerCharacter::ACarnivalPlayerCharacter()
 void ACarnivalPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+    RidePassenger->OnBoarded.AddDynamic(this, &ACarnivalPlayerCharacter::HandleRideBoarded);
+    RidePassenger->OnUnboarded.AddDynamic(this, &ACarnivalPlayerCharacter::HandleRideUnboarded);
 
 	// Default to equipping sword if available
 	if (DefaultSwordClass)
@@ -78,6 +87,12 @@ void ACarnivalPlayerCharacter::BeginPlay()
 void ACarnivalPlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+    if (OperatingRide && (!IsValid(OperatingRide) || OperatingRide->PlayerOperator != this))
+    {
+        OperatingRide = nullptr;
+        GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+    }
+    if (IsUsingRide()) return;
 
 	// Update movement state based on movement component
 	if (LocomotionState != ECarnivalLocomotionState::RidingMotorcycle &&
@@ -150,6 +165,7 @@ void ACarnivalPlayerCharacter::SetLocomotionState(ECarnivalLocomotionState NewSt
 
 void ACarnivalPlayerCharacter::StartSprinting()
 {
+    if (IsUsingRide()) return;
 	if (!bIsCrouched && !bIsProne && LocomotionState != ECarnivalLocomotionState::RidingMotorcycle)
 	{
 		GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
@@ -168,6 +184,7 @@ void ACarnivalPlayerCharacter::StopSprinting()
 
 void ACarnivalPlayerCharacter::ToggleCrouch()
 {
+    if (IsUsingRide()) return;
 	if (bIsProne)
 	{
 		ToggleProne(); // Exit prone first
@@ -188,6 +205,7 @@ void ACarnivalPlayerCharacter::ToggleCrouch()
 
 void ACarnivalPlayerCharacter::ToggleProne()
 {
+    if (IsUsingRide()) return;
 	if (bIsProne)
 	{
 		// Exit prone to stand
@@ -221,6 +239,7 @@ void ACarnivalPlayerCharacter::ToggleProne()
 
 bool ACarnivalPlayerCharacter::TryVaultOrMantle()
 {
+    if (IsUsingRide()) return false;
 	if (LocomotionState == ECarnivalLocomotionState::RidingMotorcycle)
 	{
 		return false;
@@ -281,6 +300,18 @@ bool ACarnivalPlayerCharacter::TryLadderClimb()
 
 void ACarnivalPlayerCharacter::TryInteractOrMount()
 {
+    if (OperatingRide) { LeaveRideOperator(); return; }
+    if (RidePassenger->IsRiding())
+    {
+        if (auto* Operation = RidePassenger->GetCurrentRide()->FindComponentByClass<UCarnivalRideOperationComponent>())
+            Operation->RequestPassengerExit(this);
+        return;
+    }
+    if (auto* Attendant = FindNearbyAttendant())
+    {
+        Attendant->Operation->RequestBoard(this);
+        return;
+    }
 	// Check for nearby motorcycle
 	// 1. If near an activity, start it!
 	if (NearbyActivity && NearbyActivity->ActivityState != ECarnivalActivityState::Active)
@@ -560,6 +591,7 @@ void ACarnivalPlayerCharacter::PerformAttack()
 
 void ACarnivalPlayerCharacter::MoveForward(float Value)
 {
+    if (IsUsingRide()) return;
 	if ((Controller != nullptr) && (Value != 0.0f) && LocomotionState != ECarnivalLocomotionState::RidingMotorcycle)
 	{
 		const FRotator Rotation = Controller->GetControlRotation();
@@ -571,6 +603,7 @@ void ACarnivalPlayerCharacter::MoveForward(float Value)
 
 void ACarnivalPlayerCharacter::MoveRight(float Value)
 {
+    if (IsUsingRide()) return;
 	if ((Controller != nullptr) && (Value != 0.0f) && LocomotionState != ECarnivalLocomotionState::RidingMotorcycle)
 	{
 		const FRotator Rotation = Controller->GetControlRotation();
@@ -593,4 +626,68 @@ void ACarnivalPlayerCharacter::LookUpAtRate(float Rate)
 void ACarnivalPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
+}
+
+bool ACarnivalPlayerCharacter::IsUsingRide() const
+{
+    return (RidePassenger && RidePassenger->IsRiding()) || IsValid(OperatingRide);
+}
+
+ACarnivalRideAttendant* ACarnivalPlayerCharacter::FindNearbyAttendant() const
+{
+    ACarnivalRideAttendant* Closest = nullptr;
+    float Best = FLT_MAX;
+    for (TActorIterator<ACarnivalRideAttendant> It(GetWorld()); It; ++It)
+    {
+        if (!It->Operation || !It->Operation->IsInInteractionRange(const_cast<ACarnivalPlayerCharacter*>(this))) continue;
+        const float Distance = FVector::DistSquared(GetActorLocation(), It->GetActorLocation());
+        if (Distance < Best) { Best = Distance; Closest = *It; }
+    }
+    return Closest;
+}
+
+void ACarnivalPlayerCharacter::InteractWithRideOperator()
+{
+    if (OperatingRide) { LeaveRideOperator(); return; }
+    if (RidePassenger->IsRiding()) return;
+    if (auto* Attendant = FindNearbyAttendant())
+    {
+        if (Attendant->Operation->TakeOperatorControl(this))
+        {
+            OperatingRide = Attendant->Operation;
+            GetCharacterMovement()->StopMovementImmediately();
+            GetCharacterMovement()->DisableMovement();
+        }
+    }
+}
+
+void ACarnivalPlayerCharacter::LeaveRideOperator()
+{
+    if (!OperatingRide) return;
+    if (IsValid(OperatingRide)) OperatingRide->ReleaseOperatorControl(this);
+    OperatingRide = nullptr;
+    GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+}
+
+void ACarnivalPlayerCharacter::HandleRideBoarded(AActor* RideActor, UCarnivalRideSeatComponent* Seat)
+{
+    PreRideCameraLength = CameraBoom->TargetArmLength;
+    CameraBoom->TargetArmLength = 200.f;
+    if (RideSeatedAnimation)
+    {
+        PreRideAnimationMode = GetMesh()->GetAnimationMode();
+        PreRideAnimClass = GetMesh()->GetAnimClass();
+        GetMesh()->PlayAnimation(RideSeatedAnimation, true);
+    }
+}
+
+void ACarnivalPlayerCharacter::HandleRideUnboarded(AActor* RideActor)
+{
+    CameraBoom->TargetArmLength = PreRideCameraLength;
+    if (RideSeatedAnimation)
+    {
+        GetMesh()->SetAnimationMode(static_cast<EAnimationMode::Type>(PreRideAnimationMode));
+        if (PreRideAnimClass) GetMesh()->SetAnimInstanceClass(PreRideAnimClass);
+    }
+    SetLocomotionState(ECarnivalLocomotionState::Jogging);
 }

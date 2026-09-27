@@ -36,8 +36,8 @@ protected:
 	void DrawFastTravelGuide();
 	void DrawSettingsMenu(ACarnivalPlayerController* PC);
 	void DrawActivityOverlay(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC);
+	void DrawRideInteraction(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC);
 	void DrawCrosshair();
 
 	void DrawBoxWithText(float X, float Y, float Width, float Height, const FString& Header, const TArray<FString>& Lines, const FLinearColor& BoxColor, const FLinearColor& HeaderColor, const FLinearColor& TextColor);
 };
-

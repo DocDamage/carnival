@@ -19,6 +19,25 @@ class CARNIVALGAME_API ACarnivalPlayerController : public APlayerController
 
 public:
 	ACarnivalPlayerController();
+	virtual bool InputKey(const FInputKeyEventArgs& Params) override;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Input")
+	bool bUsingGamepad = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Input")
+	bool bPlayStationPrompts = true;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Input")
+	float StickLookDegreesPerSecond = 120.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	UInputAction* LookStickAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	UInputAction* ContextInteractAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	UInputAction* CancelAction;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	UInputMappingContext* DefaultMappingContext;
@@ -131,9 +150,13 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 	virtual void OnPossess(APawn* InPawn) override;
+	virtual void OnUnPossess() override;
 
 	void OnMove(const FInputActionValue& Value);
 	void OnLook(const FInputActionValue& Value);
+	void OnLookStick(const FInputActionValue& Value);
+	void OnContextInteract();
+	void OnCancel();
 	void OnJumpVault();
 	void OnStartSprint();
 	void OnStopSprint();
@@ -167,4 +190,3 @@ protected:
 	UPROPERTY()
 	UUserWidget* SettingsMenuWidget;
 };
-

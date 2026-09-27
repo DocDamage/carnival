@@ -1,6 +1,9 @@
 // Copyright CarnivalMetaHuman. All Rights Reserved.
 
 #include "CarnivalHUD.h"
+#include "CarnivalRideAttendant.h"
+#include "CarnivalRideOperationComponent.h"
+#include "CarnivalRidePassengerComponent.h"
 #include "CarnivalPlayerCharacter.h"
 #include "CarnivalPlayerController.h"
 #include "CarnivalMotorcycle.h"
@@ -40,11 +43,67 @@ void ACarnivalHUD::DrawHUD()
 	}
 
 	DrawActivityOverlay(Char, PC);
+	DrawRideInteraction(Char, PC);
 
 	if (bShowSettingsMenu)
 	{
 		DrawSettingsMenu(PC);
 	}
+}
+
+void ACarnivalHUD::DrawRideInteraction(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC)
+{
+	if (!Char || !PC) return;
+	const bool bRiding = Char->RidePassenger && Char->RidePassenger->IsRiding();
+	UCarnivalRideOperationComponent* Operation = Char->OperatingRide;
+	if (!Operation && bRiding)
+		Operation = Char->RidePassenger->GetCurrentRide()->FindComponentByClass<UCarnivalRideOperationComponent>();
+	ACarnivalRideAttendant* Attendant = Operation ? Cast<ACarnivalRideAttendant>(Operation->Attendant) : Char->FindNearbyAttendant();
+	if (!Operation && Attendant) Operation = Attendant->Operation;
+	if (!Operation) return;
+	const bool bPad = PC->bUsingGamepad;
+	const bool bPS = PC->bPlayStationPrompts;
+	const FString Board = bPad ? (bPS ? TEXT("Triangle") : TEXT("Y")) : TEXT("F");
+	const FString Operate = bPad ? TEXT("D-pad Right") : TEXT("E");
+	const FString Start = bPad ? (bPS ? TEXT("Cross") : TEXT("A")) : TEXT("Shift");
+	const FString Stop = bPad ? (bPS ? TEXT("Square") : TEXT("X")) : TEXT("Space");
+	const FString Leave = bPad ? (bPS ? TEXT("Circle") : TEXT("B")) : TEXT("Backspace");
+	TArray<FString> Lines;
+	FString Status;
+	switch (Operation->State)
+	{
+	case ECarnivalOperationState::Loading: Status = TEXT("Now boarding"); break;
+	case ECarnivalOperationState::Securing: Status = TEXT("Attendant checking seats"); break;
+	case ECarnivalOperationState::Running: Status = TEXT("Ride in progress"); break;
+	case ECarnivalOperationState::Returning: Status = TEXT("Returning to the loading platform"); break;
+	case ECarnivalOperationState::Unloading: Status = TEXT("Please exit the platform"); break;
+	default: Status = TEXT("Ride closed"); break;
+	}
+	Lines.Add(Status);
+	if (!Operation->IsReady()) Lines.Add(TEXT("This ride is not ready to board."));
+	else if (Char->OperatingRide)
+	{
+		Lines.Add(FString::Printf(TEXT("[%s] Start  |  [%s] Return to platform"), *Start, *Stop));
+		Lines.Add(FString::Printf(TEXT("[%s] Hand controls back to attendant"), *Leave));
+	}
+	else if (bRiding)
+	{
+		Lines.Add(Operation->State == ECarnivalOperationState::Returning
+			? TEXT("Stay seated until the ride stops.")
+			: FString::Printf(TEXT("[%s] Request exit  |  Look around freely"), *Board));
+	}
+	else
+	{
+		if (Operation->State == ECarnivalOperationState::Loading)
+			Lines.Add(FString::Printf(TEXT("[%s] Board the ride"), *Board));
+		else Lines.Add(TEXT("Please wait for the next boarding call."));
+		if (Operation->bAllowPlayerOperation && !Operation->PlayerOperator)
+			Lines.Add(FString::Printf(TEXT("[%s] Ask attendant to operate the ride"), *Operate));
+	}
+	const float Width = FMath::Min(540.f, Canvas->ClipX - 40.f);
+	DrawBoxWithText((Canvas->ClipX - Width) * .5f, Canvas->ClipY - 150.f, Width, 125.f,
+		Attendant && !Attendant->RideName.IsEmpty() ? Attendant->RideName.ToString() : TEXT("Ride attendant"), Lines,
+		FLinearColor(.025f,.035f,.05f,.9f), FLinearColor(1.f,.78f,.35f), FLinearColor::White);
 }
 
 void ACarnivalHUD::ToggleSettingsMenu()

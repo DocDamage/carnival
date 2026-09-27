@@ -41,8 +41,15 @@ Content/__ExternalObjects__/
 # Imported coastal pack and its copied, authored demo-level layouts.
 Content/RailBridge/
 Content/StarterContent/
+Content/IndustrialSlums/
+Content/Hospital_Meshingun/
 Content/Carnival/World/Levels/
+# User-supplied industrial hospital ambience, extracted locally from the provided archive.
+Content/Carnival/Audio/IndustrialHospital/
 # Doll model, materials, and retargeted licensed animation exports stay local.
 # Their import, rigging, animation, and placement tools are versioned in Scripts/.
 Content/Carnival/Characters/PossessedDoll/
+
+# Retargets of the locally licensed seated animation pack.
+Content/Carnival/Rides/Animations/
 

@@ -10,12 +10,17 @@
 class USpringArmComponent;
 class UCameraComponent;
 class UAnimMontage;
+class UAnimSequence;
 class ACarnivalMotorcycle;
 class ACarnivalBoat;
 class ACarnivalHovercraft;
 class ACarnivalWeaponBase;
 class UCarnivalBuildComponent;
 class ACarnivalActivityBase;
+class ACarnivalRideAttendant;
+class UCarnivalRidePassengerComponent;
+class UCarnivalRideOperationComponent;
+class UCarnivalRideSeatComponent;
 
 UCLASS(Blueprintable)
 class CARNIVALGAME_API ACarnivalPlayerCharacter : public ACharacter
@@ -37,6 +42,21 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Build")
 	UCarnivalBuildComponent* BuildComponent;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Rides")
+    TObjectPtr<UCarnivalRidePassengerComponent> RidePassenger;
+    UPROPERTY(BlueprintReadOnly, Category="Rides")
+    TObjectPtr<UCarnivalRideOperationComponent> OperatingRide;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Rides")
+    TObjectPtr<UAnimSequence> RideSeatedAnimation;
+    UFUNCTION(BlueprintPure, Category="Rides")
+    ACarnivalRideAttendant* FindNearbyAttendant() const;
+    UFUNCTION(BlueprintCallable, Category="Rides")
+    void InteractWithRideOperator();
+    UFUNCTION(BlueprintCallable, Category="Rides")
+    void LeaveRideOperator();
+    UFUNCTION(BlueprintPure, Category="Rides")
+    bool IsUsingRide() const;
 
 	/* Current locomotion state */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Locomotion")
@@ -194,9 +214,16 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+    UFUNCTION()
+    void HandleRideBoarded(AActor* RideActor, UCarnivalRideSeatComponent* Seat);
+    UFUNCTION()
+    void HandleRideUnboarded(AActor* RideActor);
+    float PreRideCameraLength = 350.f;
+    uint8 PreRideAnimationMode = 0;
+    UPROPERTY(Transient)
+    TObjectPtr<UClass> PreRideAnimClass;
 
 	float DefaultCapsuleHalfHeight;
 	float DefaultCapsuleRadius;
 	bool bIsProne;
 };
-
