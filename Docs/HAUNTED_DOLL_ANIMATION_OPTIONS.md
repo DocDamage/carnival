@@ -1,5 +1,7 @@
 # Haunted doll animation options
 
+**Current integration:** The mobile rig and Unreal character now have their own [setup guide](HAUNTED_DOLL_IN_UNREAL.md). The research and seated-rig notes below describe the earlier asset audit.
+
 **Rigging update (2026-09-26):** A separate seated rig is now available at `F:\3D Characters\Metahuman Downloads\Possessed Doll\Rigged_Seated\Possessed_Doll_Seated_Rig.blend`, with FBX/GLB exports, optional hand IK, packed textures, and a short original demonstration action. See the [rig's README](<F:/3D Characters/Metahuman Downloads/Possessed Doll/Rigged_Seated/README.md>). The original GLB described below is still unchanged and unrigged. The user confirmed that the doll can stay seated; locomotion preparation is not part of the delivered rig.
 
 Inspected 2026-09-26. Recommendation: **RamsterZ Creepy Doll** for the seated possessed doll. Suitable commercial animation packs exist, so a complete custom animation library is unnecessary. The supplied model needs a rig before any of these animations can drive it.

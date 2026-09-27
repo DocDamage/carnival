@@ -121,7 +121,6 @@ void ACarnivalHUD::DrawTelemetry(ACarnivalPlayerCharacter* Char, ACarnivalPlayer
 	Lines.Add(TEXT("Driving: [W/S] Throttle/Reverse | [A/D] Steer | [Space] Brake / Boost"));
 	Lines.Add(TEXT("Settings / Physics Toggle: [M] or [Tab]"));
 
-	DrawBoxWithText(20.0f, 20.0f, 400.0f, 220.0f,
 	DrawBoxWithText(20.0f, 20.0f, 420.0f, 240.0f,
 		TEXT("CARNIVAL HERO CONTROLS & STATUS"),
 		Lines,

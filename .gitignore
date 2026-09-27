@@ -38,3 +38,11 @@ Content/Town/
 Content/__ExternalActors__/
 Content/__ExternalObjects__/
 
+# Imported coastal pack and its copied, authored demo-level layouts.
+Content/RailBridge/
+Content/StarterContent/
+Content/Carnival/World/Levels/
+# Doll model, materials, and retargeted licensed animation exports stay local.
+# Their import, rigging, animation, and placement tools are versioned in Scripts/.
+Content/Carnival/Characters/PossessedDoll/
+

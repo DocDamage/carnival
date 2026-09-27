@@ -2,7 +2,7 @@
 	"FileVersion": 3,
 	"EngineAssociation": "5.8",
 	"Category": "Games",
-	"Description": "CarnivalMetaHuman — a living carnival population demo built on Creepwood Wonderland content.",
+	"Description": "CarnivalMetaHuman \u2014 a living carnival population demo built on Creepwood Wonderland content.",
 	"Modules": [
 		{
 			"Name": "CarnivalGame",
@@ -52,6 +52,22 @@
 			"TargetAllowList": [
 				"Editor"
 			]
+		},
+		{
+			"Name": "Water",
+			"Enabled": true
+		},
+		{
+			"Name": "WaterExtras",
+			"Enabled": true
+		},
+		{
+			"Name": "Landmass",
+			"Enabled": true
+		},
+		{
+			"Name": "HDRIBackdrop",
+			"Enabled": true
 		}
 	]
 }

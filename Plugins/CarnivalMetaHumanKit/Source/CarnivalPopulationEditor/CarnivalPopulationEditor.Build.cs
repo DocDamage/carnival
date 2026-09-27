@@ -23,5 +23,6 @@ public class CarnivalPopulationEditor : ModuleRules
             "MassCrowd",
             "ZoneGraph"
         });
+        PrivateDependencyModuleNames.AddRange(new string[] { "Landscape", "Foliage" });
     }
 }

@@ -469,10 +469,8 @@ void ACarnivalPlayerCharacter::OnDismountHovercraft()
 
 void ACarnivalPlayerCharacter::PerformMountedAttack(bool bIsShooting, bool bPunchRight)
 {
-	if (bIsShooting && CurrentWeapon)
 	if (bIsShooting)
 	{
-		CurrentWeapon->PerformAttack(this);
 		if (MountedShootMontage)
 		{
 			PlayAnimMontage(MountedShootMontage);
@@ -484,7 +482,6 @@ void ACarnivalPlayerCharacter::PerformMountedAttack(bool bIsShooting, bool bPunc
 	}
 	else
 	{
-		UAnimMontage* PunchMontage = bPunchRight ? UnarmedPunchMontage : UnarmedPunchMontage;
 		UAnimMontage* PunchMontage = bPunchRight ? MountedPunchRightMontage : MountedPunchLeftMontage;
 		if (!PunchMontage)
 		{

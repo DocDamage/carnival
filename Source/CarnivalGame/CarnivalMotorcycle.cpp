@@ -136,8 +136,7 @@ void ACarnivalMotorcycle::UpdateArcadePhysics(float DeltaTime)
 		Params.AddIgnoredActor(CurrentRider);
 	}
 
-	if (GetWorld()->LineTraceSingleByChannel(GroundHit, StartTrace, EndTrace, ECC_WorldStatic, Params))
-	bool bHit = GetWorld()->LineTraceSingleByChannel(GroundHit, StartTrace, EndTrace, ECC_WorldStatic, Params);
+	const bool bHit = GetWorld()->LineTraceSingleByChannel(GroundHit, StartTrace, EndTrace, ECC_WorldStatic, Params);
 	if (bHit && VerticalVelocity <= 0.0f)
 	{
 		// Smoothly position onto ground
@@ -149,8 +148,11 @@ void ACarnivalMotorcycle::UpdateArcadePhysics(float DeltaTime)
 		// Align roll with leaning and pitch with ground slope
 		FRotator CurrentRot = GetActorRotation();
 		FVector Normal = GroundHit.ImpactNormal;
-		FRotator SlopeRot = Normal.ToOrientationRotator();
-		float TargetPitch = SlopeRot.Pitch + 90.0f;
+		// Project the ground slope along the bike's heading. An upward normal's
+		// orientation has a 90-degree pitch, so adding 90 inverted a level bike.
+		const FVector Heading = FRotator(0.0f, CurrentRot.Yaw, 0.0f).Vector();
+		const float TargetPitch = FMath::RadiansToDegrees(FMath::Atan2(
+			-FVector::DotProduct(Normal, Heading), FMath::Max(Normal.Z, 0.001)));
 		
 
 		// Launch off ramp if speeding off an upward slope
