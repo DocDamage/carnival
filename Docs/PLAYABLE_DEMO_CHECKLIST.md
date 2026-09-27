@@ -1,12 +1,12 @@
 # Playable demo checklist
 
-Audit: September 26, 2026. Baseline: `b3fa0cab`.
+Audit: September 27, 2026. Baseline implementation commit: `be6dff0b`.
 
-The selected scope is **Carnival + coastal wetlands/railroad bridge + haunted mansion, with a short horror objective**, including seamless access on foot and by motorcycle. The user also requires **every carnival ride to be usable and run by NPC attendants**, player operator controls where appropriate, a small lively midway that grows ominous, **scripted doll scares without death or failure**, and **full modern controller support with GTA V-inspired controls**. DualSense is the user's first test controller.
+The first-demo scope includes **the Carnival, coastal wetlands/railroad bridge, haunted mansion, industrial slums, and abandoned fully explorable hospital**, with seamless walking and motorcycle access. It also includes **every discussed project location and gameplay system**, every usable attendant-run Carnival ride, applicable player operator controls, a small lively midway that grows ominous, scripted doll scares without death or failure, full modern controller support, and the missing-worker/music-box story. DualSense is the first hardware test controller. On 2026-09-27, the user explicitly clarified that everything discussed is part of the first demo; earlier “deferred” labels below are superseded.
 
-The story combines a missing carnival worker, an old music box, and unexplained lights/sounds. The proposed connection is that the worker disappeared while recovering the box from the mansion. The user selected finding the worker alive and frightened, then returning to the carnival with every ride still available. Decisions are recorded in `Docs/FIRST_DEMO_DESIGN.md`; the proposed controller layout and operation requirements are in `Docs/CONTROLLER_AND_RIDE_CONTROLS.md`. A roughly 15–20 minute story is a proposed target; riding every attraction and free exploration add optional play time.
+The core story combines a missing carnival worker, an old music box, and unexplained lights/sounds. The proposed connection is that the worker disappeared while recovering the box from the mansion. The user selected finding the worker alive and frightened, then returning to the carnival with every ride still available. Decisions are recorded in `Docs/FIRST_DEMO_DESIGN.md`; the proposed controller layout and operation requirements are in `Docs/CONTROLLER_AND_RIDE_CONTROLS.md`. The 15–20 minute estimate applies only to the core story proposal; the overall first demo also includes all discussed worlds, gameplay systems, rides, and the slums/hospital branch, and has no measured total duration.
 
-This checklist comes from the current source, setup scripts, integration records, and saved validation reports. An unchecked item can mean unfinished implementation or missing end-to-end verification; it does not automatically mean that no supporting assets exist. No new gameplay or packaging tests were run for this audit.
+This checklist comes from the current source, setup scripts, integration records, and saved validation reports. An unchecked item can mean unfinished implementation or missing end-to-end verification; it does not automatically mean that no supporting assets exist. The hospital branch was added after the earlier audit and is included below. No new gameplay or packaging tests were run for this audit.
 
 **Already established**
 
@@ -15,6 +15,7 @@ This checklist comes from the current source, setup scripts, integration records
 - The saved route passed 570 sampled floor/clearance checks with no blocking obstructions. This is not an audit of every accessible room or every place a player can leave the route.
 - The doll has a 26-bone rig, 31 animation clips, reusable retargeting assets, and a tested approach/chase/scare/return system. One instance is placed beside the carnival haunted-house queue.
 - The native editor build and controlled doll/route tests passed. The route tests used movement APIs and excluded the crowd spawner in an unsaved test world; hardware input, populated-scene performance, and a packaged demo are not established by those results. Automated doll tests did not audition audio.
+- The opposite-side industrial branch is connected through nine sublevels, with a 1,536 m road, slum district, hospital exterior and interior, and six audio cues. The editor capture loaded the expected levels without errors. The previews are overexposed, and PIE traversal/exploration has not been accepted.
 
 **Work remaining, in implementation order**
 
@@ -68,12 +69,16 @@ This checklist comes from the current source, setup scripts, integration records
    - [ ] Check bridge edges, water access, off-route terrain, terrain seams, and alternate approaches beyond the already-tested centreline.
    - [ ] Tune signs, landmarks, sound, and a small number of suspense beats so the 3-5 minute normal-speed trip has a purpose.
    - [ ] Preserve seamless travel. Disable the demo's F-key map shortcuts or redirect them deliberately: F2 currently opens the separate source mansion map.
+   - [ ] Accept the opposite-side industrial route in PIE on foot and by motorcycle: verify road collision, slum travel, transitions, and safe vehicle dismounts.
+   - [ ] Correct the washed-out slum, hospital approach, and interior views while preserving Carnival night and worsening weather toward the hospital.
+   - [ ] Verify factory-facade and entrance alignment; traverse the complete hospital interior and check doors, collision, lighting, audio, and access to all intended rooms.
+   - [ ] Cook and test the hospital sublevels and their local asset dependencies in the standalone Windows build. The hospital's role in the story still needs design.
 
 10. **Finish the characters and animation transitions that appear in the demo.**
     - [ ] Inspect player locomotion, jump/land, motorcycle mount/ride/dismount, and interaction animations on the actual player mesh.
     - [ ] Check retarget scale, foot sliding, hand contact, clothing/dress intersections, and animation transitions for every selected doll action.
-    - [ ] Choose a small cast from the available adults/children. If children appear, verify their skeleton compatibility, proportions, navigation capsules, and any seated poses separately.
-    - [ ] Retarget only additional pack clips that the mission needs. The doll rig and retargeter already exist; importing the entire animation library is not a release requirement.
+    - [ ] Complete the discussed adult and child character roster. Verify skeleton compatibility, proportions, navigation capsules, clothing, and seated poses for each character used.
+    - [ ] Integrate and validate the discussed animation content for the first demo, including retargeting, transitions, contacts, and runtime costs. The doll rig and retargeter already exist.
 
 11. **Prove the carnival crowd works during gameplay.**
     - [ ] Validate the actual placed crowd spawner, built collections/outfits, walking behavior, navigation, and representation changes near the player.
@@ -111,12 +116,12 @@ This checklist comes from the current source, setup scripts, integration records
     - [ ] Make text readable at supported resolutions and provide practical camera-shake/motion settings. Save settings between launches.
     - [ ] Make every menu, setting, confirmation, objective/clue screen, ride interface, and operator control work with controller focus, confirm/back navigation, and correct button prompts.
 
-16. **Hide or complete features that would undermine the demo.**
+16. **Complete every discussed player-facing feature.**
     - [ ] Remove development travel/build/weapon shortcuts from the demo control scheme unless they are deliberately supported.
     - [ ] Do not expose unfinished movement as a promised feature: native ladder climbing is a stub; vault/mantle completion and clearance need end-to-end verification.
-    - [ ] If an activity is included, fix/test start, finish, retry, cancel, scoring, and resetting targets. Current collectible overlap accepts any character, and target scoring lacks an active-activity guard.
-    - [ ] If combat is included, implement actual hit/damage behavior and feedback. The native weapon attack currently plays montage/audio only. Full combat is unnecessary for the selected escape-focused proposal.
-    - [ ] If stunts are included, repair/test ramp launch: the current arcade code immediately clears the launch velocity it just assigned. Advanced physics modes also need their own validation.
+    - [ ] Complete every discussed activity, including start, finish, retry, cancel, scoring, and target resets. Current collectible overlap accepts any character, and target scoring lacks an active-activity guard.
+    - [ ] Implement full combat with actual hit/damage behavior and feedback. The native weapon attack currently plays montage/audio only; define how combat fits the story and non-failing scripted scares.
+    - [ ] Include building, advanced parkour, boats, hovercraft, advanced motorcycle stunts, and additional physics modes; finish their controls, feedback, recovery, and acceptance tests. The current arcade ramp code clears its launch velocity immediately.
 
 17. **Profile and stabilize the full scene.**
     - [ ] Select the target PC specification and frame-rate target, then measure CPU/GPU frame time, RAM, VRAM, loading, and hitches with crowds, rides, motorcycle, lighting, and doll active.
@@ -135,18 +140,18 @@ This checklist comes from the current source, setup scripts, integration records
     - [ ] Preserve important files currently under `Saved` separately from disposable generated data. GitHub currently excludes licensed world/doll assets and is not a complete project backup.
     - [ ] Record required asset packs, regeneration steps, exact build version, tester controls, and applicable credits/attributions.
 
-**Deferred from this first demo**
+**Additional discussed scope now included in the first demo**
 
-- Seamless placement/connections for Town, Lighthouse, Castle, Arena, and Mars.
-- Every imported adult/child and every animation pack. Every carnival ride is required now.
-- Full combat, extensive parkour, building, boat/hovercraft gameplay, advanced motorcycle stunts, and additional physics modes unless explicitly added to the demo scope.
-- A large inventory, long campaign, or multi-slot save system.
+- Connect and make playable the previously discussed Town, Lighthouse, Castle, Arena, and Mars locations, with their intended travel links and complete play flows.
+- Include the discussed adult/child character roster and animation content alongside every Carnival ride.
+- Include full combat, extensive parkour, building, boats, hovercraft, advanced motorcycle stunts, and additional physics modes.
+- Include the discussed larger inventory, long campaign, and multi-slot save system. Their detailed content, design, and acceptance criteria still need specification.
 
-Existing code/assets for these systems can be retained while their unfinished player-facing controls are disabled in the demo.
+These items were previously described as deferred; the user's latest direction brings them into the first demo. Existing code/assets do not establish that their player-facing systems are complete.
 
 **Acceptance test**
 
-A new player can launch a packaged Windows executable and then use a controller alone to navigate all menus, ride every attendant-operated carnival attraction and take over applicable operator controls, follow the missing-worker/music-box mystery, reach the mansion on foot or by motorcycle without a map change, experience the scripted scares without death or failure, complete the story, return to a staffed carnival for free play, restart, and quit. Attendants resume control after player operation. Safe recovery handles accidental falls or stuck vehicles. This must work with the intended population, visuals, and audio enabled at the agreed performance target, with keyboard/mouse use also preserved.
+A new player can launch a packaged Windows executable and use a controller alone to play the full first-demo scope: Carnival, coastal wetlands/bridge, mansion story, industrial slums and explorable hospital, plus Town, Lighthouse, Castle, Arena, Mars, and the other discussed systems. They can use every ride with attendants, applicable operator controls, combat, parkour, building, boats/hovercraft, motorcycle features, the full discussed character/animation roster, long-form story, inventory, and save slots. The missing-worker/music-box story ends with the worker found alive and the player able to return to Carnival free play; scripted scares never cause death or failure. Restart, quit, safe recovery, keyboard/mouse use, intended NPC population, visuals, audio, and the agreed performance target all work in the packaged build.
 
 **Audit references**
 

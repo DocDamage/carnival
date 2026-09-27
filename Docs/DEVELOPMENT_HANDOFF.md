@@ -1,6 +1,6 @@
 # Carnival development handoff — updated 2026-09-27
 
-This is the living project handoff. Resume from this document and the current working tree. **Do not restart the work or regenerate the entire project.** The original ride milestone below is retained; the latest milestone adds the opposite-side industrial slums and explorable hospital branch described near the end.
+This is the living project handoff. Resume from this document and the current working tree. **Do not restart the work or regenerate the entire project.** The original ride milestone and the industrial-slums/hospital branch are both part of the first playable demo. The user's 2026-09-27 clarification is that everything discussed for this project belongs in that demo; previous deferred-scope labels are superseded.
 
 ## Original ride milestone and verification (retained)
 
@@ -14,7 +14,6 @@ Implemented the first attended ride cycle, player boarding/unloading, operator h
 - No physical DualSense hardware test or rendered/PIE inspection of the new map has been completed.
 - `Scripts/preview_attended_swing.py` was just written and **has not been run**.
 - No Unreal process or tool session remains running as of handoff.
-- Changes are local and **uncommitted/unpushed**. Earlier user-requested GitHub push belonged to prior work and was already completed.
 
 ## User's agreed demo requirements
 
@@ -27,9 +26,11 @@ Implemented the first attended ride cycle, player boarding/unloading, operator h
 - Doll has stiff, twitchy possessed movement; first demo uses **scripted scares only, no failure/death/chase penalty**.
 - After the mansion, return to carnival and keep using rides.
 - Full modern controller support reminiscent of GTA V; **PS5 DualSense is the first test controller**.
+- The first demo also includes the opposite-side route through industrial slums to the abandoned, fully explorable hospital. Keep Carnival night and increase the weather severity toward the hospital.
+- The user clarified that every other discussed location and gameplay system is also first-demo scope, including previously deferred Town, Lighthouse, Castle, Arena, Mars, combat, building, parkour, boats/hovercraft, advanced motorcycle features/physics, broader characters/animations, and expanded story/inventory/save work. Detailed requirements for this expanded scope remain to be authored.
 - User authorizes substantive development and Blender animation work. Avoid unnecessary permission questions. No subagent delegation is currently authorized.
 
-Planning documents from prior turns remain relevant, but have not yet been updated for this implementation milestone:
+Planning documents reflecting the expanded scope:
 
 - `Docs/PLAYABLE_DEMO_CHECKLIST.md`
 - `Docs/FIRST_DEMO_DESIGN.md`
@@ -192,15 +193,15 @@ Evidence files:
 
 ## Working tree preservation
 
-This session changed source, scripts, several project-owned Blueprints/input assets and `.gitignore`. Nothing has been committed. Inspect `git status` before continuing.
+The ride and hospital implementation, scripts, project-owned Blueprints/input assets, and planning documents have been committed and pushed to GitHub. Locally licensed source packs and oversized crowd/MetaHuman/groom/outfit content remain on this workstation and were intentionally excluded from the public repository.
 
-Verified branch: `main`. HEAD: `b3fa0cab` — `fix: stabilize connected world rendering and validate mansion travel`.
+Verified branch: `main`. The ride/hospital implementation commit is `be6dff0b` — `Add ride attendants and industrial hospital route`.
 
 Preserve pre-existing untracked user content: `%SystemDrive%/`, `Content/Carnival/Crowd/`, `Content/Carnival/MetaHumans/`, `Content/Grooms/`, `Content/Outfits/`, `Content/PlayMusicAnim/`. These are not cleanup targets and should not be blindly staged.
 
 Purchased source packs, the doll assets, connected licensed maps and retargeted licensed animations remain local. Existing `.gitignore` records exclusions; scripts and original code are the reproducible deliverable.
 
-Prior ride-focused next-chat instruction (superseded while the hospital route awaits acceptance): **Read `F:\Carnival\Docs\DEVELOPMENT_HANDOFF.md`, inspect the current working tree, then resume at rendered/PIE validation of the attended swing and place its attendant in the main carnival. Preserve the requirement that every ride eventually has a working attendant and remains usable after the mansion sequence.**
+Prior ride-focused next-chat instruction (superseded by the complete first-demo scope): **Read `F:\Carnival\Docs\DEVELOPMENT_HANDOFF.md` and the current first-demo checklist, then continue implementation and acceptance of every discussed first-demo location and system. The hospital branch is in scope alongside the coast/mansion route; preserve full attendant coverage for every ride.**
 
 ## Opposite-Side Industrial Hospital Route — implemented; runtime acceptance pending
 
@@ -231,6 +232,6 @@ Connection and authoring evidence is in `Saved/IndustrialHospital/World_Connecti
 - The persistent Carnival root map is the existing licensed project map at `/Game/Creepwood_Carnival_Meshingun/Environment/Map/LV_Carnival`.
 - Authored branch maps are in `/Game/Carnival/World/Levels/`; this folder is already ignored because these copied demo layouts depend on local source assets.
 - The cropped slum source content and hospital source pack under `Content/IndustrialSlums/` and `Content/Hospital_Meshingun/` are ignored. Extracted hospital ambience under `Content/Carnival/Audio/IndustrialHospital/` is now narrowly ignored too.
-- Do not stage unrelated dirty ride, crowd, MetaHuman, or music-animation work when reviewing these branch changes. Nothing in this milestone was committed.
+- Ride implementation is part of the first-demo scope. Keep source-pack assets and the local crowd/MetaHuman/groom/outfit/music-animation folders out of public commits, following the user's instruction not to push those assets.
 
-Suggested next work: **Read this handoff and `Docs/INDUSTRIAL_HOSPITAL_CONNECTION.md`, inspect the current working tree, then resolve the connected-preview exposure and verify motorcycle/foot traversal into and through the hospital in PIE. Preserve the existing mansion branch and continue the separate ride-attendant milestone afterward.**
+Suggested next work: **Read this handoff and `Docs/PLAYABLE_DEMO_CHECKLIST.md`. Continue treating all discussed locations and systems—including the industrial slums and explorable hospital—as first-demo scope. First accept the overexposed hospital branch in PIE, then complete the story, rides, controller, other locations/systems, and packaged end-to-end test.**

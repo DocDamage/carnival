@@ -1,10 +1,12 @@
 # First demo design — decisions and proposed details
 
-This records the user's selected direction and clearly labels the details still proposed. It is not a record of implemented gameplay.
+This records the user's selected direction and clearly labels the details still proposed. It is not a record of implemented gameplay. On 2026-09-27, the user clarified that everything discussed for this project belongs in the first demo. This supersedes earlier wording that deferred discussed locations or systems.
 
 **Confirmed decisions**
 
 - Carnival, connected coastal wetlands/railroad bridge, and haunted mansion, with seamless walking and motorcycle access.
+- A second road from the opposite Carnival gate goes through the industrial slums to the abandoned, fully explorable hospital. Keep the night setting and worsen the weather toward the hospital.
+- All previously discussed project locations and gameplay systems belong to this first demo; none are deferred solely because an earlier note called them later milestones.
 - Combine all three story elements: a missing carnival worker, an old music box, and unexplained lights/sounds at the mansion.
 - Scripted doll scares only, with no death or failure condition. The doll's movement style stays stiff and twitchy.
 - A small lively midway that gradually feels ominous.
@@ -34,6 +36,8 @@ The player begins at a still-operating carnival near closing time, with every ri
 
 The carnival's noise fades along the wetlands route, which can be travelled on foot or by motorcycle. Distant lights and the music-box melody draw attention toward the mansion. Inside, a short trail of the worker's belongings or notes leads through a few rooms. The player finds the worker alive and frightened, then retrieves the box near a seated doll. Recovering the box triggers a staged reveal: a head snap, a sudden change of position while out of view, or a brief lunge with sound and lighting. The player can continue safely; the sequence does not become a chase or catch-and-retry loop.
 
+The opposite-side industrial branch is also first-demo content: players can leave the Carnival, travel through the slums, and explore the abandoned hospital interior. Its narrative connection to the missing-worker investigation has not yet been selected; preserve it as a complete explorable branch while that story role is designed.
+
 The investigation resolves by finding the worker and recovering the box. The player returns to carnival free play, with every ride still available. Recommended staging: the worker leaves independently and is present at the carnival on return, avoiding a mandatory escort. A small final audio cue can suggest that the haunting followed the box without locking rides or starting a new failure sequence.
 
 The music-box prop, melody, worker character, and exact mansion rooms still need selection. The three story elements form one investigation and one objective chain rather than three separate quests.
@@ -47,9 +51,11 @@ The music-box prop, melody, worker character, and exact mansion rooms still need
 | Mansion exploration | 4–6 minutes | Follow the worker's clues and the music through a few rooms, use one simple interaction, find the box and doll. |
 | Scripted scares and resolution | 1–2 minutes | Experience the doll reveal after finding the worker alive, and leave safely with the box. |
 | Return journey | Mode-dependent | Travel back to carnival free play using the same seamless route and chosen travel mode. |
+| Industrial slums and hospital | Additional exploration | Current route estimates are about 5:41 on foot or 4:00 by cautious motorcycle to the hospital door; full interior exploration time is unmeasured. |
+| Other discussed locations and systems | To be scoped and measured | Town, Lighthouse, Castle, Arena, Mars, and all other discussed gameplay systems are included in this first demo. |
 | Carnival rides and exploration | Open-ended | Every ride is usable and repeatable; total play time grows with the rides the player chooses. |
 
-The story can target roughly 15–20 minutes including a return journey; all-ride free play has no forced time limit. These are design targets to measure. The 3–5 minute route target is for normal-speed travel on foot; motorcycle travel is naturally shorter. The existing approximately 3:50 foot test is evidence for the route only, not a measured mission length.
+The core missing-worker story can target roughly 15–20 minutes including a return journey; this is a design target to measure, not the length of the full first demo. The slums/hospital, all rides, and other discussed locations and systems add play time. The 3–5 minute route target is for normal-speed travel on foot; motorcycle travel is naturally shorter. The existing approximately 3:50 foot test is evidence for the coastal route only, not a measured mission length.
 
 **Recommended defaults for the remaining decisions**
 
@@ -63,10 +69,10 @@ The story can target roughly 15–20 minutes including a return journey; all-rid
 | Doll control | Drive the demo instances from mission triggers and gate the existing automatic chase behavior off. | Existing chase capability remains reusable, but the demo must respect the user's no-failure choice. |
 | Failure | No death, catch penalty, mission timer, or mandatory scare retry. Keep the path usable and prevent scare animations from trapping the player. | Confirmed user preference. Environmental mishaps still need gentle recovery. |
 | Recovery | Safe repositioning for a stuck player/vehicle; restore consistent mission state on manual restart. | Technical recovery should not introduce a punishment loop. |
-| Combat | No combat in the first demo; remove weapon prompts/default equipment from its player setup. | Fits the selected investigation and scripted scares. |
+| Combat | Include the combat system discussed for the project; define its encounters, feedback, controls, and relationship to the story and scripted scares. | The user's latest scope clarification supersedes the earlier recommendation to omit combat. |
 | Motorcycle | Optional travel, with obvious parking outside the mansion and reliable recovery/dismount. | Both travel choices remain viable; the house is explored on foot. |
 | Crowd | Start with a small tested population; choose the final count from performance measurements. | The full crowd has not been validated in the combined scene. |
-| Child characters | Use a few only after their rig, animation, collision, and clothing checks pass; ordinary background carnival guests. | Keeps their inclusion tied to readiness rather than merely having downloaded the models. |
+| Child characters | Include the discussed character roster as demo content; verify rig, animation, collision, clothing, navigation, and performance for each character used. | The latest scope direction includes all discussed character content; readiness and integration remain acceptance work. |
 | Rides | Every ride in the playable carnival is usable by the player and repeatable. Build common boarding/ride/exit behavior first, then complete and test each attraction. | Confirmed user requirement. Existing NPC passenger components are not proof of player riding. |
 | Ride operation | Separate operator controls where meaningful; ordinary passenger use remains available. | Confirmed user choice, with controls tailored to the ride's mechanisms. |
 | Ride attendants | Assigned NPC staff run every operating attraction by default, handle boarding/unloading, and hand over/resume applicable player operator controls. | Confirmed user requirement for attendants running the rides. |
@@ -78,7 +84,7 @@ The story can target roughly 15–20 minutes including a return journey; all-rid
 | Interface | Start, pause/resume, retry, quit, concise objective text, contextual prompts, basic settings. | Covers the complete standalone player flow. |
 | Performance | Target scalable 1080p at 60 fps on the current PC, then measure and tune. | A target for profiling, not a performance claim or published minimum specification. |
 | First testers | A small private Windows build for a few fresh players before a public release. | Finds confusing objectives and control failures before broader distribution. |
-| Progress storage | Reliable mission state and settings persistence first. | A large save-slot system is not needed; longer free-play sessions may justify a simple resume save later. |
+| Progress storage | Include the discussed long campaign, larger inventory, and multi-slot save system, with reliable mission/settings persistence. | These were previously deferred; the latest scope direction brings them into the first demo. Detailed requirements remain to be authored. |
 | Ending | Complete the investigation and return to carnival free play with all rides available. | Confirmed user choice; show story completion without terminating free play. |
 
 **All-ride completion requirement**
@@ -98,4 +104,4 @@ All-ride operation is a release requirement. The story's short duration does not
 5. Finish environment lighting, audio, selected animations, and the small population within a measured performance budget.
 6. Package, test the whole story, all menus, every ride, and applicable operator panels using controller-only play; repair failures and repeat with final content enabled. Retest keyboard/mouse alongside controller hot switching.
 
-All remaining implementation and verification tasks are tracked in `Docs/PLAYABLE_DEMO_CHECKLIST.md`. Other locations, combat, building, advanced parkour, boats, hovercraft, and expanded story content remain later milestones unless the user changes scope. The carnival's existing rides are included now.
+All remaining implementation and verification tasks are tracked in `Docs/PLAYABLE_DEMO_CHECKLIST.md`. The user's latest scope clarification brings all discussed locations and systems into the first demo, including Town, Lighthouse, Castle, Arena, Mars, combat, building, advanced parkour, boats, hovercraft, advanced motorcycle stunts, additional physics modes, the discussed character/animation content, and expanded story, inventory, and save work. Detailed designs and acceptance criteria for those systems remain to be written.
