@@ -12,6 +12,7 @@ public class CarnivalPopulationEditor : ModuleRules
             "CoreUObject",
             "Engine",
             "UnrealEd",
+            "CarnivalPopulation",
             "AssetRegistry",
             "MetaHumanCharacter",
             "MetaHumanCharacterPalette",
@@ -19,6 +20,7 @@ public class CarnivalPopulationEditor : ModuleRules
             "MetaHumanCrowdEditor",
             "MassEntity",
             "MassSpawner",
+            "MassLOD",
             "MassRepresentation",
             "MassCrowd",
             "ZoneGraph"

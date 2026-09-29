@@ -24,6 +24,24 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Input")
 	bool bUsingGamepad = false;
 
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Input")
+	bool bControllerDisconnectPaused = false;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Input")
+	bool bSettingsMenuOpen = false;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Input|Settings")
+	bool bInvertLookY = false;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Input|Settings")
+	float StickDeadZone = 0.12f;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Input|Settings")
+	bool bSprintToggleMode = false;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Input|Settings")
+	int32 SettingsMenuSelection = 0;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Input")
 	bool bPlayStationPrompts = true;
 
@@ -134,6 +152,15 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Motorcycle")
 	UInputAction* BrakeAction;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input")
+	UInputAction* BrakeReverseAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Motorcycle")
+	UInputAction* HandbrakeAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Motorcycle")
+	UInputAction* RiderBalanceAction;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	TSubclassOf<UUserWidget> SettingsMenuWidgetClass;
 
@@ -148,9 +175,21 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void SetupInputComponent() override;
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void OnUnPossess() override;
+
+	UFUNCTION()
+	void HandleInputDeviceConnectionChange(EInputDeviceConnectionState NewConnectionState, FPlatformUserId PlatformUserId, FInputDeviceId InputDeviceId);
+
+	void ClearCurrentPawnInputs(bool bLeaveRideOperator = true);
+	void LoadPlayerInputSettings();
+	void SavePlayerInputSettings() const;
+	void HandleSettingsMenuInput(const FInputKeyEventArgs& Params);
+	void AdjustSelectedSetting(int32 Direction);
+	void ActivateSelectedSetting();
+	void ResetPlayerInputSettings();
 
 	void OnMove(const FInputActionValue& Value);
 	void OnLook(const FInputActionValue& Value);
@@ -186,7 +225,13 @@ protected:
 	void OnThrottle(const FInputActionValue& Value);
 	void OnSteer(const FInputActionValue& Value);
 	void OnBrake(const FInputActionValue& Value);
+	void OnBrakeReverse(const FInputActionValue& Value);
+	void OnHandbrake(const FInputActionValue& Value);
+	void OnRiderBalance(const FInputActionValue& Value);
 
 	UPROPERTY()
 	UUserWidget* SettingsMenuWidget;
+
+	FInputDeviceId LastActiveGamepadDeviceId = INPUTDEVICEID_NONE;
+	bool bSprintToggleActive = false;
 };

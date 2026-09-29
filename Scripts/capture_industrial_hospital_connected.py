@@ -7,7 +7,7 @@ from pathlib import Path
 import unreal
 
 ROOT = Path(r"F:\Carnival")
-OUT = ROOT / "Saved/IndustrialHospital/Previews/Connected"
+OUT = ROOT / globals().get("CAPTURE_OUTPUT", "Saved/IndustrialHospital/Previews/Connected")
 OUT.mkdir(parents=True, exist_ok=True)
 import sys
 sys.path.insert(0, str(ROOT / "Scripts"))
@@ -30,12 +30,19 @@ CASES = [
     ("01_Carnival_Exit",
      world_point((-1800.0, 0.0, 750.0)), world_point((5000.0, 0.0, 300.0))),
     ("02_Industrial_Slums",
-     world_point((65500.0, -3000.0, 1500.0)), world_point((68500.0, 0.0, 300.0))),
+     world_point((65500.0, 6000.0, 210.0)), world_point((68500.0, 6000.0, 210.0))),
     ("03_Hospital_Approach",
      world_point((147500.0, -5000.0, 1900.0)), world_point((151000.0, 0.0, 600.0))),
     ("04_Hospital_Entrance_Interior",
-     hospital_world((3900.0, -1750.0, 210.0)), hospital_world((6200.0, -1750.0, 210.0))),
+     hospital_world((5200.0, -1500.0, 210.0)), hospital_world((5200.0, -300.0, 210.0))),
 ]
+CASES.extend(globals().get("CAPTURE_EXTRA_CASES", []))
+
+# Optional unsaved diagnostic captures share the exact same camera and map.
+VARIANTS = globals().get("CAPTURE_VARIANTS", [])
+if VARIANTS:
+    approach = CASES[2]
+    CASES = [(variant["name"], approach[1], approach[2]) for variant in VARIANTS]
 
 report = {"map": MAIN_MAP, "images": [], "cases": [], "errors": []}
 editor_actors = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
@@ -83,6 +90,9 @@ def tick(delta):
                     visible = name == "Lv_LightingNightSnow"
                     unreal.EditorLevelUtils.set_level_visibility(level, visible, True)
                     report["preview_lighting"][name] = visible
+            setup_hook = globals().get("CAPTURE_SETUP")
+            if setup_hook:
+                report["setup"] = setup_hook(world, editor_actors)
             # Record the streamed actor bounds after the lighting-level
             # selection has had a few frames to settle.
             state.update(phase="audit", deadline=time.monotonic() + 8)
@@ -122,6 +132,14 @@ def tick(delta):
                 finish()
                 return
             name, position, target = CASES[state["index"]]
+            if VARIANTS:
+                variant = VARIANTS[state["index"]]
+                for command in variant["commands"]:
+                    unreal.SystemLibrary.execute_console_command(state["world"], command)
+                variant_hook = globals().get("CAPTURE_VARIANT_HOOK")
+                if variant_hook:
+                    variant_hook(variant, state["world"], editor_actors)
+                report.setdefault("diagnostic_variants", []).append(variant)
             camera = state["camera"]
             camera.set_actor_location(unreal.Vector(*position), False, True)
             camera.set_actor_rotation(

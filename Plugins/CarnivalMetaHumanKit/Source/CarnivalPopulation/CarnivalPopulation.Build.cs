@@ -10,7 +10,16 @@ public class CarnivalPopulation : ModuleRules
         {
             "Core",
             "CoreUObject",
-            "Engine"
+            "Engine",
+            "MassSpawner"
+        });
+
+        PrivateDependencyModuleNames.AddRange(new string[]
+        {
+            "MassActors",
+            "MassCommon",
+            "MassCore",
+            "MassEntity"
         });
     }
 }

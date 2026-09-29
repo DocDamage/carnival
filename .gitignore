@@ -44,6 +44,15 @@ Content/StarterContent/
 Content/IndustrialSlums/
 Content/Hospital_Meshingun/
 Content/Carnival/World/Levels/
+# Locally imported licensed packs for the world expansion; keep source assets local.
+Content/Docks/
+Content/HAUNTED_PRISON/
+Content/SciFiWorld/
+Content/Sewer/
+Content/UnderwaterShip/
+Content/Atlantis_Ruins/
+# Night variants reference the locally licensed coastal backdrop materials.
+Content/Carnival/World/Materials/ConnectedNight/
 # User-supplied industrial hospital ambience, extracted locally from the provided archive.
 Content/Carnival/Audio/IndustrialHospital/
 # Doll model, materials, and retargeted licensed animation exports stay local.
@@ -52,4 +61,10 @@ Content/Carnival/Characters/PossessedDoll/
 
 # Retargets of the locally licensed seated animation pack.
 Content/Carnival/Rides/Animations/
+
+# Assembled exports derived from the locally licensed motorcycle pack.
+Content/Carnival/Vehicles/Motorcycle/Assembled/
+Content/Carnival/Vehicles/Motorcycle/Fitted/
+# Local editable copy of the licensed Manny graph, recreated by authoring script.
+Content/Carnival/Character/Animations/ABP_CarnivalManny.uasset
 

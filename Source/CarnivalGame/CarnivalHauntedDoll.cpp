@@ -4,11 +4,16 @@
 #include "Animation/AnimSequence.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Engine/SkeletalMesh.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "NavigationSystem.h"
 #include "Sound/SoundBase.h"
 #include "Sound/SoundAttenuation.h"
+#include "Engine/GameInstance.h"
+#include "Engine/World.h"
 
 ACarnivalHauntedDoll::ACarnivalHauntedDoll()
 {
@@ -37,9 +42,84 @@ ACarnivalHauntedDoll::ACarnivalHauntedDoll()
 void ACarnivalHauntedDoll::BeginPlay()
 {
     Super::BeginPlay();
+    if (bMissionControlledInstance) bEncounterEnabled = false;
+    if (UWorld* World = GetWorld())
+    {
+        if (UGameInstance* GameInstance = World->GetGameInstance())
+        {
+            if (UCarnivalMissionSubsystem* Mission = GameInstance->GetSubsystem<UCarnivalMissionSubsystem>())
+            {
+                Mission->OnMissionChanged.AddDynamic(this, &ACarnivalHauntedDoll::HandleMissionStateChanged);
+            }
+        }
+    }
     HomeLocation = GetActorLocation();
     HomeRotation = GetActorRotation();
     LastProgressLocation = HomeLocation;
+}
+
+void ACarnivalHauntedDoll::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    if (UWorld* World = GetWorld())
+    {
+        if (UGameInstance* GameInstance = World->GetGameInstance())
+        {
+            if (UCarnivalMissionSubsystem* Mission = GameInstance->GetSubsystem<UCarnivalMissionSubsystem>())
+            {
+                Mission->OnMissionChanged.RemoveDynamic(this, &ACarnivalHauntedDoll::HandleMissionStateChanged);
+            }
+        }
+    }
+    Super::EndPlay(EndPlayReason);
+}
+
+void ACarnivalHauntedDoll::HandleMissionStateChanged(ECarnivalStoryMissionState NewState, FText)
+{
+    if (bMissionScareActive && NewState != ECarnivalStoryMissionState::PlayDollScare)
+    {
+        CancelScriptedMissionScare();
+    }
+}
+
+void ACarnivalHauntedDoll::CancelScriptedMissionScare()
+{
+	if (!bMissionScareActive) return;
+	if (APlayerController* PlayerController = TargetPlayer ? Cast<APlayerController>(TargetPlayer->GetController()) : nullptr)
+	{
+		if (PlayerController->PlayerCameraManager)
+		{
+			PlayerController->PlayerCameraManager->SetManualCameraFade(0.0f, FLinearColor::Black, false);
+		}
+	}
+	bMissionScareActive = false;
+    if (ManualAction == MissionHeadSnapAnimation || ManualAction == ScareAnimation)
+    {
+        ManualAction = nullptr;
+        ++AnimationRevision;
+    }
+    GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+    TargetPlayer = nullptr;
+	SetEncounterState(EDollEncounterState::Idle);
+}
+
+void ACarnivalHauntedDoll::ReceiveMissionScareBeat_Implementation(EDollMissionScareBeat Beat, APawn* Player)
+{
+	APlayerController* PlayerController = Player ? Cast<APlayerController>(Player->GetController()) : nullptr;
+	APlayerCameraManager* CameraManager = PlayerController ? PlayerController->PlayerCameraManager : nullptr;
+	if (!CameraManager)
+	{
+		return;
+	}
+
+	if (Beat == EDollMissionScareBeat::Blackout)
+	{
+		const float FadeSeconds = FMath::Clamp(MissionBlackoutSeconds * 0.3f, 0.08f, 0.16f);
+		CameraManager->StartCameraFade(0.0f, 1.0f, FadeSeconds, FLinearColor::Black, false, true);
+	}
+	else if (Beat == EDollMissionScareBeat::Lunge)
+	{
+		CameraManager->StartCameraFade(1.0f, 0.0f, 0.16f, FLinearColor::Black, false, false);
+	}
 }
 
 bool ACarnivalHauntedDoll::HasSightTo(const APawn* Player) const
@@ -142,6 +222,7 @@ void ACarnivalHauntedDoll::MoveToward(const FVector& Destination, float Speed, f
 
 void ACarnivalHauntedDoll::ResetEncounter()
 {
+    bMissionScareActive = false;
     if (ManualAction == JumpAnimation && ManualAction)
         GetCharacterMovement()->SetMovementMode(MOVE_Falling);
     ManualAction = nullptr;
@@ -163,9 +244,101 @@ bool ACarnivalHauntedDoll::PlayDollAction(UAnimSequence* Animation)
     return true;
 }
 
+bool ACarnivalHauntedDoll::BeginScriptedMissionScare(APawn* Player)
+{
+    UWorld* World = GetWorld();
+    UGameInstance* GameInstance = World ? World->GetGameInstance() : nullptr;
+    const UCarnivalMissionSubsystem* Mission = GameInstance ? GameInstance->GetSubsystem<UCarnivalMissionSubsystem>() : nullptr;
+    USkeletalMesh* SkeletalMesh = GetMesh()->GetSkeletalMeshAsset();
+    if (!Player || bMissionScareActive || !Mission || Mission->GetMissionState() != ECarnivalStoryMissionState::PlayDollScare
+        || !SkeletalMesh || !MissionHeadSnapAnimation || !ScareAnimation
+        || MissionHeadSnapAnimation->GetSkeleton() != SkeletalMesh->GetSkeleton()
+        || ScareAnimation->GetSkeleton() != SkeletalMesh->GetSkeleton())
+    {
+        return false;
+    }
+
+    bEncounterEnabled = false;
+    TargetPlayer = Player;
+    bMissionScareActive = true;
+    MissionScareBeat = EDollMissionScareBeat::HeadSnap;
+    MissionScareBeatAge = 0.f;
+    SetEncounterState(EDollEncounterState::Notice);
+    ++ScareCount;
+    if (!PlayDollAction(MissionHeadSnapAnimation))
+    {
+        bMissionScareActive = false;
+        TargetPlayer = nullptr;
+        return false;
+    }
+    ReceiveMissionScareBeat(EDollMissionScareBeat::HeadSnap, Player);
+    return true;
+}
+
+void ACarnivalHauntedDoll::TickScriptedMissionScare(float DeltaSeconds)
+{
+    MissionScareBeatAge += DeltaSeconds;
+    if (ManualAction)
+    {
+        ActionAge += DeltaSeconds;
+        if (ActionAge < ManualAction->GetPlayLength()) return;
+        ManualAction = nullptr;
+        ++AnimationRevision;
+    }
+
+    switch (MissionScareBeat)
+    {
+    case EDollMissionScareBeat::HeadSnap:
+        MissionScareBeat = EDollMissionScareBeat::Blackout;
+        MissionScareBeatAge = 0.f;
+        ReceiveMissionScareBeat(EDollMissionScareBeat::Blackout, TargetPlayer);
+        break;
+    case EDollMissionScareBeat::Blackout:
+        if (MissionScareBeatAge < MissionBlackoutSeconds) return;
+        MissionScareBeat = EDollMissionScareBeat::Lunge;
+        MissionScareBeatAge = 0.f;
+        GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+        PlayDollAction(ScareAnimation);
+        if (ScareSound)
+        {
+            UGameplayStatics::PlaySoundAtLocation(this, ScareSound, GetActorLocation(),
+                FRotator::ZeroRotator, ScareVolume, 1.f, 0.f, ScareAttenuation);
+        }
+        ReceiveMissionScareBeat(EDollMissionScareBeat::Lunge, TargetPlayer);
+        break;
+    case EDollMissionScareBeat::Lunge:
+        MissionScareBeat = EDollMissionScareBeat::Aftermath;
+        MissionScareBeatAge = 0.f;
+        GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+        ReceiveMissionScareBeat(EDollMissionScareBeat::Aftermath, TargetPlayer);
+        break;
+    case EDollMissionScareBeat::Aftermath:
+        if (MissionScareBeatAge < MissionAftermathSeconds) return;
+        if (UWorld* World = GetWorld())
+        {
+            if (UGameInstance* GameInstance = World->GetGameInstance())
+            {
+                if (UCarnivalMissionSubsystem* Mission = GameInstance->GetSubsystem<UCarnivalMissionSubsystem>())
+                {
+                    Mission->ReportDollScareComplete();
+                }
+            }
+        }
+        SetEncounterState(EDollEncounterState::Idle);
+        TargetPlayer = nullptr;
+        bMissionScareActive = false;
+        break;
+    }
+}
+
 void ACarnivalHauntedDoll::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+    if (bMissionScareActive)
+    {
+        TickScriptedMissionScare(DeltaSeconds);
+        return;
+    }
     if (ManualAction)
     {
         ActionAge += DeltaSeconds;

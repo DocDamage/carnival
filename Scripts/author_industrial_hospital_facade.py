@@ -3,12 +3,15 @@ import json
 import traceback
 from pathlib import Path
 import unreal
+import sys
+sys.path.insert(0, r"F:\Carnival\Scripts")
+from industrial_hospital_route_config import FACADE_LOCAL
 
 ROOT = Path(r"F:\Carnival")
 REPORT_PATH = ROOT / "Saved/IndustrialHospital/Hospital_Facade_Authoring.json"
 LEVEL = "/Game/Carnival/World/Levels/L_IndustrialHospitalExterior"
 LEVEL_FILE = ROOT / "Content/Carnival/World/Levels/L_IndustrialHospitalExterior.umap"
-LOCAL = (6150.0, -8000.0, -87.0)
+LOCAL = FACADE_LOCAL
 report = {"phase": "starting"}
 
 
@@ -18,7 +21,7 @@ def add_lamp(eas, name, location):
     light = actor.get_editor_property("light_component")
     light.set_editor_property("intensity", 2200.0)
     light.set_editor_property("attenuation_radius", 3200.0)
-    light.set_editor_property("light_color", unreal.Color(255, 61, 23, 255))
+    light.set_editor_property("light_color", unreal.Color(r=255, g=61, b=23, a=255))
     light.set_editor_property("cast_shadows", False)
     return actor
 

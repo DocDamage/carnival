@@ -17,6 +17,7 @@ class ACarnivalHovercraft;
 class ACarnivalWeaponBase;
 class UCarnivalBuildComponent;
 class ACarnivalActivityBase;
+class ACarnivalMissionInteractionActor;
 class ACarnivalRideAttendant;
 class UCarnivalRidePassengerComponent;
 class UCarnivalRideOperationComponent;
@@ -128,8 +129,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Vehicle")
 	void TryInteractOrMount();
 
+	UFUNCTION(BlueprintCallable, Category = "Interaction")
+	void TryContextInteract();
+
+	UFUNCTION(BlueprintPure, Category = "Story Mission")
+	ACarnivalMissionInteractionActor* FindNearbyMissionInteraction() const;
+
+	UFUNCTION(BlueprintPure, Category = "Recovery")
+	bool CanRecoverToSafePosition() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Recovery")
+	bool TryRecoverToSafePosition();
+
 	void OnMountMotorcycle(ACarnivalMotorcycle* Bike, bool bMountLeft);
-	void OnDismountMotorcycle(ACarnivalMotorcycle* Bike);
+	void OnDismountMotorcycle(ACarnivalMotorcycle* Bike, bool bDismountLeft = true);
 	void PerformMountedAttack(bool bIsShooting, bool bPunchRight = false);
 
 	void OnMountBoat(ACarnivalBoat* Boat);
@@ -226,4 +239,22 @@ protected:
 	float DefaultCapsuleHalfHeight;
 	float DefaultCapsuleRadius;
 	bool bIsProne;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Recovery", meta = (ClampMin = "0.1"))
+	float BlockedInputRecoveryDelay = 4.f;
+	UPROPERTY(EditDefaultsOnly, Category = "Recovery", meta = (ClampMin = "0.1"))
+	float SwimmingRecoveryDelay = 4.f;
+	UPROPERTY(EditDefaultsOnly, Category = "Recovery", meta = (ClampMin = "0.1"))
+	float FallingRecoveryDelay = 5.f;
+
+	FVector LastSafeRecoveryLocation = FVector::ZeroVector;
+	FRotator LastSafeRecoveryRotation = FRotator::ZeroRotator;
+	float SafeLocationRefreshTime = 0.f;
+	float BlockedInputDuration = 0.f;
+	float SwimmingDuration = 0.f;
+	float FallingDuration = 0.f;
+	bool bHasSafeRecoveryLocation = false;
+
+	void UpdateSafeRecoveryState(float DeltaTime);
+	bool FindSafeRecoveryLocation(FVector& OutLocation) const;
 };

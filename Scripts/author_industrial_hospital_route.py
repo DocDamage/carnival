@@ -21,7 +21,7 @@ from industrial_hospital_route_config import (
     HOSPITAL_DOOR_LOCAL, HOSPITAL_DOOR_ROUTE_POINT, HOSPITAL_EXTERIOR_LEVEL,
     HOSPITAL_LIGHT_LEVEL, HOSPITAL_YAW, MAIN_MAP, ROAD_CONTROL_POINTS,
     ROUTE_LEVEL, ROUTE_WORLD_YAW, SLUM_LEVEL, OUT as CONFIG_OUT,
-    hospital_level_transform, route_manifest, slum_level_transform,
+    hospital_level_transform, route_manifest, slum_level_transform, hospital_setdress_level, HOSPITAL_SETDRESS_SOURCE,
 )
 
 REPORT = {"phase": "starting", "created_levels": [], "connected_levels": [], "errors": []}
@@ -108,7 +108,7 @@ def spawn_mesh(eas, name, mesh, location, rotation, materials=()):
 
 
 def point_on_route(s):
-    points = ROAD_CONTROL_POINTS
+    points = json.loads((OUT / "Industrial_Hospital_Route_Meshes.json").read_text())["route_points_local_cm"]
     if s <= points[0][0]:
         return points[0]
     for a, b in zip(points, points[1:]):
@@ -171,7 +171,8 @@ def add_point_light(eas, name, position, color, intensity=1100.0, radius=1800.0)
     light = actor.get_editor_property("light_component")
     light.set_editor_property("intensity", float(intensity))
     light.set_editor_property("attenuation_radius", float(radius))
-    light.set_editor_property("light_color", unreal.Color(int(color[0] * 255), int(color[1] * 255), int(color[2] * 255), 255))
+    light.set_editor_property("light_color", unreal.Color(
+        r=int(color[0] * 255), g=int(color[1] * 255), b=int(color[2] * 255), a=255))
     light.set_editor_property("cast_shadows", False)
     return actor
 
@@ -313,6 +314,12 @@ def connect_world():
     world = unreal.EditorLoadingAndSavingUtils.load_map(MAIN_MAP)
     if not world:
         raise RuntimeError("Could not load Carnival root map")
+    if hospital_setdress_level() != HOSPITAL_SETDRESS_SOURCE:
+        for level in list(unreal.EditorLevelUtils.get_levels(world)):
+            path = level.get_path_name().split(":PersistentLevel")[0].split(".")[0]
+            if path == HOSPITAL_SETDRESS_SOURCE:
+                if not unreal.EditorLevelUtils.remove_level_from_world(level):
+                    raise RuntimeError("Could not replace source set dressing")
     existing = {level.get_path_name().split(":PersistentLevel")[0].split(".")[0] for level in unreal.EditorLevelUtils.get_levels(world)}
     hospital_location = hospital_level_transform()
     slum_location, slum_yaw = slum_level_transform()
@@ -321,7 +328,7 @@ def connect_world():
         (SLUM_LEVEL, slum_location, slum_yaw),
         (HOSPITAL_EXTERIOR_LEVEL, hospital_location, HOSPITAL_YAW),
         (HOSPITAL_ARCH_LEVEL, hospital_location, HOSPITAL_YAW),
-        ("/Game/Hospital_Meshingun/Environment/Map/LV_Hospital_Main_SetDress", hospital_location, HOSPITAL_YAW),
+        (hospital_setdress_level(), hospital_location, HOSPITAL_YAW),
         ("/Game/Hospital_Meshingun/Environment/Map/LV_Hospital_Main_Decal", hospital_location, HOSPITAL_YAW),
         ("/Game/Hospital_Meshingun/Environment/Map/LV_Hospital_VFX", hospital_location, HOSPITAL_YAW),
         ("/Game/Hospital_Meshingun/Environment/Map/LV_Hospital_Volume", hospital_location, HOSPITAL_YAW),
@@ -344,7 +351,7 @@ def connect_world():
             REPORT["connected_levels"].append(path)
         else:
             REPORT.setdefault("already_connected", []).append(path)
-    if not unreal.EditorLevelLibrary.save_current_level():
+    if not unreal.EditorLoadingAndSavingUtils.save_map(world, MAIN_MAP):
         raise RuntimeError("Could not save Carnival root map with new connected levels")
     REPORT["main_map"] = MAIN_MAP
     REPORT["hospital_transform"] = {"location": hospital_location, "yaw": HOSPITAL_YAW}

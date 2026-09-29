@@ -4,6 +4,8 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Animation/AnimSequence.h"
+#include "Animation/AnimMontage.h"
+#include "Animation/AnimInstance.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Camera/CameraComponent.h"
@@ -13,6 +15,7 @@
 #include "CarnivalWeaponBase.h"
 #include "CarnivalBuildComponent.h"
 #include "CarnivalActivityBase.h"
+#include "CarnivalMissionInteractionActor.h"
 #include "CarnivalRideAttendant.h"
 #include "CarnivalRidePassengerComponent.h"
 #include "CarnivalRideSeatComponent.h"
@@ -20,6 +23,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Engine/World.h"
+#include "GameFramework/WorldSettings.h"
+#include "Components/CapsuleComponent.h"
 
 ACarnivalPlayerCharacter::ACarnivalPlayerCharacter()
 {
@@ -92,7 +97,13 @@ void ACarnivalPlayerCharacter::Tick(float DeltaTime)
         OperatingRide = nullptr;
         GetCharacterMovement()->SetMovementMode(MOVE_Walking);
     }
-    if (IsUsingRide()) return;
+    if (IsUsingRide())
+    {
+        BlockedInputDuration = SwimmingDuration = FallingDuration = 0.f;
+        return;
+    }
+
+	UpdateSafeRecoveryState(DeltaTime);
 
 	// Update movement state based on movement component
 	if (LocomotionState != ECarnivalLocomotionState::RidingMotorcycle &&
@@ -139,11 +150,151 @@ void ACarnivalPlayerCharacter::Tick(float DeltaTime)
 	}
 	else if (LocomotionState == ECarnivalLocomotionState::RidingMotorcycle)
 	{
-		if (RidingIdleMontage && !GetCurrentMontage())
+		UAnimMontage* ActiveMontage = GetCurrentMontage();
+		UAnimInstance* RiderAnim = GetMesh()->GetAnimInstance();
+		const bool bMountAtSeat = RiderAnim && ActiveMontage
+			&& (ActiveMontage == MountLeftMontage || ActiveMontage == MountRightMontage)
+			&& RiderAnim->Montage_GetPosition(ActiveMontage) >= ActiveMontage->GetPlayLength() - .02f;
+		// Fitted mounts hold the seated end. Blend directly into riding idle
+		// instead of blending out through the standing locomotion graph.
+		if (RidingIdleMontage && (!ActiveMontage || bMountAtSeat))
 		{
 			PlayAnimMontage(RidingIdleMontage, 1.0f);
+			if (UAnimInstance* Anim = GetMesh()->GetAnimInstance())
+			{
+				const FName Section = RidingIdleMontage->GetSectionName(0);
+				if (!Section.IsNone()) Anim->Montage_SetNextSection(Section, Section, RidingIdleMontage);
+			}
 		}
 	}
+}
+
+void ACarnivalPlayerCharacter::UpdateSafeRecoveryState(float DeltaTime)
+{
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	if (!Movement || !GetWorld()) return;
+
+	const bool bSwimming = Movement->IsSwimming() || Movement->IsInWater();
+	const bool bFalling = Movement->IsFalling();
+	SwimmingDuration = bSwimming ? SwimmingDuration + DeltaTime : 0.f;
+	FallingDuration = bFalling ? FallingDuration + DeltaTime : 0.f;
+
+	const FVector Acceleration = Movement->GetCurrentAcceleration();
+	const float InputThreshold = FMath::Max(60.f, Movement->GetMaxAcceleration() * .2f);
+	const bool bHasMovementIntent = Acceleration.Size2D() >= InputThreshold
+		|| GetLastMovementInputVector().Size2D() >= .25f
+		|| GetPendingMovementInputVector().Size2D() >= .25f;
+	const bool bBlockedWhileTryingToMove = Movement->IsMovingOnGround()
+		&& !bSwimming
+		&& bHasMovementIntent
+		&& GetVelocity().Size2D() < 24.f;
+	BlockedInputDuration = bBlockedWhileTryingToMove ? BlockedInputDuration + DeltaTime : 0.f;
+
+	// Keep a recent full-height, walkable position. Crouched and prone locations
+	// are excluded so recovery can safely restore the player's normal capsule.
+	const bool bSafeGround = Movement->IsMovingOnGround() && !bSwimming && !bFalling
+		&& !bIsCrouched && !bIsProne
+		&& GetCapsuleComponent()->GetCollisionEnabled() == ECollisionEnabled::QueryAndPhysics;
+	if (bSafeGround)
+	{
+		SafeLocationRefreshTime -= DeltaTime;
+		if (!bHasSafeRecoveryLocation || SafeLocationRefreshTime <= 0.f)
+		{
+			LastSafeRecoveryLocation = GetActorLocation();
+			LastSafeRecoveryRotation = FRotator(0.f, GetActorRotation().Yaw, 0.f);
+			bHasSafeRecoveryLocation = true;
+			SafeLocationRefreshTime = .25f;
+		}
+	}
+	else
+	{
+		SafeLocationRefreshTime = 0.f;
+	}
+}
+
+bool ACarnivalPlayerCharacter::CanRecoverToSafePosition() const
+{
+	if (!bHasSafeRecoveryLocation || !GetWorld() || IsUsingRide()
+		|| MountedMotorcycle || MountedBoat || MountedHovercraft)
+	{
+		return false;
+	}
+
+	const AWorldSettings* WorldSettings = GetWorld()->GetWorldSettings();
+	const bool bBelowKillPlane = WorldSettings && GetActorLocation().Z < WorldSettings->KillZ + 500.f;
+	return BlockedInputDuration >= BlockedInputRecoveryDelay
+		|| SwimmingDuration >= SwimmingRecoveryDelay
+		|| FallingDuration >= FallingRecoveryDelay
+		|| bBelowKillPlane;
+}
+
+bool ACarnivalPlayerCharacter::FindSafeRecoveryLocation(FVector& OutLocation) const
+{
+	if (!GetWorld() || !GetCapsuleComponent() || !GetCharacterMovement()) return false;
+
+	const float Radius = DefaultCapsuleRadius * GetCapsuleComponent()->GetShapeScale();
+	const float HalfHeight = DefaultCapsuleHalfHeight * GetCapsuleComponent()->GetShapeScale();
+	const FCollisionShape StandingCapsule = FCollisionShape::MakeCapsule(Radius, HalfHeight);
+	const FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(PlayerSafeRecovery), false, this);
+	const FVector Offsets[] = {
+		FVector::ZeroVector,
+		FVector(70.f, 0.f, 0.f), FVector(-70.f, 0.f, 0.f), FVector(0.f, 70.f, 0.f), FVector(0.f, -70.f, 0.f),
+		FVector(140.f, 0.f, 0.f), FVector(-140.f, 0.f, 0.f), FVector(0.f, 140.f, 0.f), FVector(0.f, -140.f, 0.f),
+		FVector(70.f, 70.f, 0.f), FVector(70.f, -70.f, 0.f), FVector(-70.f, 70.f, 0.f), FVector(-70.f, -70.f, 0.f)
+	};
+
+	for (const FVector& Offset : Offsets)
+	{
+		const FVector Sample = LastSafeRecoveryLocation + Offset;
+		const FVector TraceStart = Sample + FVector(0.f, 0.f, 80.f);
+		const FVector TraceEnd = Sample - FVector(0.f, 0.f, HalfHeight + 130.f);
+		FHitResult FloorHit;
+		if (!GetWorld()->LineTraceSingleByChannel(FloorHit, TraceStart, TraceEnd, ECC_Visibility, QueryParams)
+			|| !FloorHit.bBlockingHit
+			|| FloorHit.ImpactNormal.Z < GetCharacterMovement()->GetWalkableFloorZ())
+		{
+			continue;
+		}
+
+		const FVector Candidate(FloorHit.ImpactPoint.X, FloorHit.ImpactPoint.Y, FloorHit.ImpactPoint.Z + HalfHeight + 2.f);
+		if (GetWorld()->OverlapBlockingTestByChannel(Candidate, LastSafeRecoveryRotation.Quaternion(), ECC_Pawn,
+			StandingCapsule, QueryParams))
+		{
+			continue;
+		}
+
+		OutLocation = Candidate;
+		return true;
+	}
+	return false;
+}
+
+bool ACarnivalPlayerCharacter::TryRecoverToSafePosition()
+{
+	if (!CanRecoverToSafePosition()) return false;
+
+	FVector RecoveryLocation;
+	if (!FindSafeRecoveryLocation(RecoveryLocation)) return false;
+
+	if (bIsCrouched) UnCrouch();
+	bIsProne = false;
+	GetCapsuleComponent()->SetCapsuleSize(DefaultCapsuleRadius, DefaultCapsuleHalfHeight, true);
+	GetMesh()->SetRelativeLocation(FVector(0.f, 0.f, -DefaultCapsuleHalfHeight));
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	ConsumeMovementInputVector();
+
+	const bool bMoved = SetActorLocationAndRotation(RecoveryLocation, LastSafeRecoveryRotation,
+		false, nullptr, ETeleportType::TeleportPhysics);
+	if (!bMoved) return false;
+
+	SetLocomotionState(ECarnivalLocomotionState::Jogging);
+	GetCharacterMovement()->MaxWalkSpeed = JogSpeed;
+	BlockedInputDuration = SwimmingDuration = FallingDuration = 0.f;
+	LastSafeRecoveryLocation = RecoveryLocation;
+	LastSafeRecoveryRotation = FRotator(0.f, GetActorRotation().Yaw, 0.f);
+	bHasSafeRecoveryLocation = true;
+	return true;
 }
 
 void ACarnivalPlayerCharacter::Landed(const FHitResult& Hit)
@@ -300,7 +451,7 @@ bool ACarnivalPlayerCharacter::TryLadderClimb()
 
 void ACarnivalPlayerCharacter::TryInteractOrMount()
 {
-    if (OperatingRide) { LeaveRideOperator(); return; }
+    if (OperatingRide) return;
     if (RidePassenger->IsRiding())
     {
         if (auto* Operation = RidePassenger->GetCurrentRide()->FindComponentByClass<UCarnivalRideOperationComponent>())
@@ -313,21 +464,6 @@ void ACarnivalPlayerCharacter::TryInteractOrMount()
         return;
     }
 	// Check for nearby motorcycle
-	// 1. If near an activity, start it!
-	if (NearbyActivity && NearbyActivity->ActivityState != ECarnivalActivityState::Active)
-	{
-		NearbyActivity->StartActivity(this);
-		ActiveActivity = NearbyActivity;
-		return;
-	}
-	else if (ActiveActivity && (ActiveActivity->ActivityState == ECarnivalActivityState::Completed || ActiveActivity->ActivityState == ECarnivalActivityState::Failed))
-	{
-		ActiveActivity->ResetActivity();
-		ActiveActivity = nullptr;
-		return;
-	}
-
-	// 2. Check for nearby motorcycle
 	TArray<AActor*> OverlappingActors;
 	TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes;
 	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_Pawn));
@@ -343,10 +479,31 @@ void ACarnivalPlayerCharacter::TryInteractOrMount()
 		OverlappingActors
 	);
 
+	ACarnivalMotorcycle* ClosestRecoverableBike = nullptr;
+	float ClosestRecoverableDistanceSquared = TNumericLimits<float>::Max();
 	for (AActor* Actor : OverlappingActors)
 	{
 		ACarnivalMotorcycle* Bike = Cast<ACarnivalMotorcycle>(Actor);
-		if (Bike)
+		if (Bike && Bike->CanRecoverFromStuckOrOverturned())
+		{
+			const float DistanceSquared = FVector::DistSquared(GetActorLocation(), Bike->GetActorLocation());
+			if (DistanceSquared < ClosestRecoverableDistanceSquared)
+			{
+				ClosestRecoverableBike = Bike;
+				ClosestRecoverableDistanceSquared = DistanceSquared;
+			}
+		}
+	}
+	if (ClosestRecoverableBike)
+	{
+		// The first press rights the bike while leaving the player on foot. A
+		// second press uses the ordinary mount path after the recovery completes.
+		ClosestRecoverableBike->TryRecoverFromStuckOrOverturned();
+		return;
+	}
+	for (AActor* Actor : OverlappingActors)
+	{
+		if (ACarnivalMotorcycle* Bike = Cast<ACarnivalMotorcycle>(Actor))
 		{
 			bool bMountLeft = true;
 			if (Bike->CanMount(this, bMountLeft))
@@ -402,6 +559,46 @@ void ACarnivalPlayerCharacter::TryInteractOrMount()
 	}
 }
 
+void ACarnivalPlayerCharacter::TryContextInteract()
+{
+	if (ACarnivalMissionInteractionActor* MissionInteraction = FindNearbyMissionInteraction())
+	{
+		MissionInteraction->TryInteract(this);
+		return;
+	}
+	if (ActiveActivity && (ActiveActivity->ActivityState == ECarnivalActivityState::Completed
+		|| ActiveActivity->ActivityState == ECarnivalActivityState::Failed))
+	{
+		ActiveActivity->ResetActivity();
+		ActiveActivity = nullptr;
+		return;
+	}
+	if (NearbyActivity && NearbyActivity->ActivityState != ECarnivalActivityState::Active)
+	{
+		NearbyActivity->StartActivity(this);
+		ActiveActivity = NearbyActivity;
+		return;
+	}
+	InteractWithRideOperator();
+}
+
+ACarnivalMissionInteractionActor* ACarnivalPlayerCharacter::FindNearbyMissionInteraction() const
+{
+	ACarnivalMissionInteractionActor* Closest = nullptr;
+	float BestDistanceSquared = TNumericLimits<float>::Max();
+	for (TActorIterator<ACarnivalMissionInteractionActor> It(GetWorld()); It; ++It)
+	{
+		if (!It->CanInteract(this)) continue;
+		const float DistanceSquared = FVector::DistSquared(GetActorLocation(), It->GetActorLocation());
+		if (DistanceSquared < BestDistanceSquared)
+		{
+			BestDistanceSquared = DistanceSquared;
+			Closest = *It;
+		}
+	}
+	return Closest;
+}
+
 void ACarnivalPlayerCharacter::OnMountMotorcycle(ACarnivalMotorcycle* Bike, bool bMountLeft)
 {
 	if (!Bike)
@@ -427,7 +624,7 @@ void ACarnivalPlayerCharacter::OnMountMotorcycle(ACarnivalMotorcycle* Bike, bool
 	AttachToComponent(Bike->GetRootComponent(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, Bike->DriverSeatSocketName);
 }
 
-void ACarnivalPlayerCharacter::OnDismountMotorcycle(ACarnivalMotorcycle* Bike)
+void ACarnivalPlayerCharacter::OnDismountMotorcycle(ACarnivalMotorcycle* Bike, bool bDismountLeft)
 {
 	// Stop riding montage
 	if (RidingIdleMontage)
@@ -440,11 +637,8 @@ void ACarnivalPlayerCharacter::OnDismountMotorcycle(ACarnivalMotorcycle* Bike)
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
 
-	// Play dismount montage
-	if (DismountLeftMontage)
-	{
-		PlayAnimMontage(DismountLeftMontage);
-	}
+	// The motorcycle has already staged the dismount animation before
+	// restoring walking. Do not restart it from a seated pose at the exit.
 
 	MountedMotorcycle = nullptr;
 	SetLocomotionState(ECarnivalLocomotionState::Jogging);

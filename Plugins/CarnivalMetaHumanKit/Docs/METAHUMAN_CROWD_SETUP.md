@@ -23,8 +23,8 @@ The installer attempts to enable these in the `.uproject`.
 4. Build the Collection.
 5. Create many MetaHuman Instances with different heads/hair/clothing/material variations.
 6. Create a Mass Entity Config.
-7. Add MetaHuman Crowd visualization.
-8. Add `CrowdMember` for crowd navigation.
+7. Add the Carnival Mass prerequisite trait and Mass distance LOD collector before MetaHuman Crowd visualization. The prerequisite trait supplies `FTransformFragment` and `FMassActorFragment`; the LOD collector supplies viewer data.
+8. Add MetaHuman Crowd visualization and `CrowdMember` for crowd navigation. The Carnival config authoring helper adds these traits automatically.
 9. Add a StateTree trait if you want behavior states.
 10. Place the MetaHuman Mass Spawner in the carnival.
 11. Add a Nav Mesh Bounds Volume for the walkable midway.

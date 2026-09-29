@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "CarnivalMissionSubsystem.h"
 #include "CarnivalHauntedDoll.generated.h"
 
 class UAnimSequence;
@@ -12,6 +13,15 @@ UENUM(BlueprintType)
 enum class EDollEncounterState : uint8
 {
     Idle, Notice, Approach, Chase, Scare, Cooldown, Returning
+};
+
+UENUM(BlueprintType)
+enum class EDollMissionScareBeat : uint8
+{
+    HeadSnap,
+    Blackout,
+    Lunge,
+    Aftermath
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDollScareEvent, APawn*, Player);
@@ -26,6 +36,7 @@ public:
     virtual void Tick(float DeltaSeconds) override;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Doll|Detection") bool bEncounterEnabled = true;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Doll|Detection") bool bMissionControlledInstance = false;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Doll|Detection", meta=(ClampMin="0")) float DetectionDistance = 850.f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Doll|Detection", meta=(ClampMin="0", ClampMax="180")) float DetectionHalfAngle = 70.f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Doll|Detection", meta=(ClampMin="0")) float LoseSightSeconds = 2.5f;
@@ -36,6 +47,8 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Doll|Scare", meta=(ClampMin="50")) float ScareDistance = 130.f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Doll|Scare", meta=(ClampMin="0")) float CooldownSeconds = 8.f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Doll|Scare", meta=(ClampMin="0", ClampMax="1")) float ScareVolume = .65f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Doll|Scare", meta=(ClampMin="0", ClampMax="2")) float MissionBlackoutSeconds = .35f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Doll|Scare", meta=(ClampMin="0", ClampMax="3")) float MissionAftermathSeconds = .8f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Doll|Scare") TObjectPtr<USoundBase> ScareSound;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Doll|Scare") TObjectPtr<USoundAttenuation> ScareAttenuation;
 
@@ -44,6 +57,7 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Doll|Animations") TObjectPtr<UAnimSequence> RunAnimation;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Doll|Animations") TObjectPtr<UAnimSequence> NoticeAnimation;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Doll|Animations") TObjectPtr<UAnimSequence> ScareAnimation;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Doll|Animations") TObjectPtr<UAnimSequence> MissionHeadSnapAnimation;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Doll|Animations") TObjectPtr<UAnimSequence> ReachAnimation;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Doll|Animations") TObjectPtr<UAnimSequence> JumpAnimation;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Doll|Animations") TObjectPtr<UAnimSequence> RamsterIdleAnimation;
@@ -60,18 +74,28 @@ public:
     UFUNCTION(BlueprintCallable, Category="Doll") void ResetEncounter();
     /** Preview extra same-skeleton actions without enabling a chase. */
     UFUNCTION(BlueprintCallable, Category="Doll") bool PlayDollAction(UAnimSequence* Animation);
+    /** Starts the no-damage, mission-gated scare beats and disables autonomous pursuit on this instance. */
+    UFUNCTION(BlueprintCallable, Category="Doll|Mission") bool BeginScriptedMissionScare(APawn* Player);
+	UFUNCTION(BlueprintNativeEvent, Category="Doll|Mission", meta=(DisplayName="On Scripted Mission Scare Beat"))
+	void ReceiveMissionScareBeat(EDollMissionScareBeat Beat, APawn* Player);
+	virtual void ReceiveMissionScareBeat_Implementation(EDollMissionScareBeat Beat, APawn* Player);
 
     UAnimSequence* GetDesiredAnimation(bool& bLooping, float& PlayRate) const;
     int32 GetAnimationRevision() const { return AnimationRevision; }
 
 protected:
     virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 private:
     void SetEncounterState(EDollEncounterState State);
     void MoveToward(const FVector& Destination, float Speed, float DeltaSeconds);
     void StopDollMovement();
     void FacePoint(const FVector& Point, float DeltaSeconds);
     bool HasSightTo(const APawn* Player) const;
+    void TickScriptedMissionScare(float DeltaSeconds);
+    UFUNCTION()
+    void HandleMissionStateChanged(ECarnivalStoryMissionState NewState, FText Objective);
+    void CancelScriptedMissionScare();
     float StateAge = 0.f;
     float LostSightAge = 0.f;
     float SenseAge = 0.f;
@@ -82,4 +106,7 @@ private:
     FRotator HomeRotation;
     FVector LastProgressLocation;
     UPROPERTY(Transient) TObjectPtr<UAnimSequence> ManualAction;
+    bool bMissionScareActive = false;
+    EDollMissionScareBeat MissionScareBeat = EDollMissionScareBeat::HeadSnap;
+    float MissionScareBeatAge = 0.f;
 };

@@ -20,7 +20,9 @@ faces = []
 for j in range(len(ys) - 1):
     for i in range(len(xs) - 1):
         a = j * nx + i
-        faces.append((a, a + 1, a + 1 + nx, a + nx))
+        # Mirroring source Y changes handedness; reverse winding so the
+        # walkable surface has upward normals in Blender and after FBX import.
+        faces.append((a + nx, a + 1 + nx, a + 1, a))
 
 mesh = bpy.data.meshes.new("SM_IndustrialSlums_TerrainPatch")
 mesh.from_pydata(verts, [], faces)

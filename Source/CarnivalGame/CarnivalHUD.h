@@ -10,6 +10,7 @@
 class ACarnivalPlayerCharacter;
 class ACarnivalPlayerController;
 class ACarnivalMotorcycle;
+class UCarnivalMissionSubsystem;
 
 UCLASS()
 class CARNIVALGAME_API ACarnivalHUD : public AHUD
@@ -36,6 +37,9 @@ protected:
 	void DrawFastTravelGuide();
 	void DrawSettingsMenu(ACarnivalPlayerController* PC);
 	void DrawActivityOverlay(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC);
+	void DrawStoryMissionOverlay(ACarnivalPlayerController* PC);
+	void DrawStoryInteractionPrompt(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC);
+	void DrawPlayerRecoveryPrompt(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC);
 	void DrawRideInteraction(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC);
 	void DrawCrosshair();
 

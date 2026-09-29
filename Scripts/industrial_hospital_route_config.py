@@ -12,6 +12,12 @@ SLUM_LEVEL = BASE + "/Levels/L_IndustrialSlums_DistrictFinal"
 HOSPITAL_EXTERIOR_LEVEL = BASE + "/Levels/L_IndustrialHospitalExterior"
 HOSPITAL_LIGHT_LEVEL = BASE + "/Levels/L_IndustrialHospitalInteriorLights"
 HOSPITAL_ARCH_LEVEL = BASE + "/Levels/L_IndustrialHospitalInteriorArchitecture"
+HOSPITAL_SETDRESS_SOURCE = "/Game/Hospital_Meshingun/Environment/Map/LV_Hospital_Main_SetDress"
+HOSPITAL_SETDRESS_LEVEL = BASE + "/Levels/L_IndustrialHospitalSetDress"
+
+def hospital_setdress_level():
+    copied = ROOT / "Content/Carnival/World/Levels/L_IndustrialHospitalSetDress.umap"
+    return HOSPITAL_SETDRESS_LEVEL if copied.exists() else HOSPITAL_SETDRESS_SOURCE
 
 # The other gate is on the northeast side of the midway.
 GATE = (7093.926, 6841.718, 42.781)
@@ -19,7 +25,7 @@ ROUTE_WORLD_YAW = 54.0
 HOSPITAL_YAW = -36.0
 
 # Each point is a road-centre sample in centimetres from the Carnival gate.
-# From 60-76 km the road follows the selected district's east-side street.
+# The 600-760 m district segment is realigned west by apply_slum_street_alignment.
 ROAD_CONTROL_POINTS = [
     (0, 0, 0), (9000, 0, 25), (19000, 1800, 55),
     (31000, 2600, 85), (42000, -500, 115), (53500, -1800, 150),
@@ -28,7 +34,9 @@ ROAD_CONTROL_POINTS = [
     (72000, 0, 430), (74000, 0, 430), (76000, 0, 478),
     (82000, 0, 500), (96000, 2500, 515), (111000, 4000, 535),
     (124000, 0, 555), (137000, -2200, 575), (145000, 0, 590),
-    (151000, 0, 600),
+    # Stop in the forecourt, six metres before the hospital wall. The doorway
+    # center is 200 cm to the right of the source modular actor's pivot.
+    (150400, -200, 600),
 ]
 ROAD_HALF_WIDTH_CM = 450.0
 ROAD_BED_HALF_WIDTH_CM = 3000.0
@@ -43,9 +51,59 @@ SLUM_CENTER_ROUTE_POINT = (68000.0, 0.0, 280.0)
 # The hospital's BO_door_4x5m2 is the entrance to the complete interior.
 HOSPITAL_DOOR_LOCAL = (5000.0, -1750.0, 80.0)
 HOSPITAL_DOOR_ROUTE_POINT = (151000.0, 0.0, 600.0)
-# The factory facade stands across the forecourt at the hospital's front gate.
-FACADE_LOCAL = (6150.0, -8000.0, -87.0)
+# The factory facade stands beside the road at the hospital forecourt.
+FACADE_LOCAL = (10150.0, -8000.0, -87.0)
 FACADE_LOCAL_YAW = 90.0
+
+
+def apply_slum_street_alignment(points):
+    """Follow the collision-probed west street while retaining every building.
+
+    Saved center and lane-edge capsule probes at offset 6000 cm found no scenery
+    obstructions. The old centerline intersected three houses. Heights come
+    from the licensed source landscape samples, with a graded road embankment.
+    """
+    import bisect
+    field = json.loads((OUT / "Source/Slum_Terrain_Heightfield.json").read_text())
+    xs, ys, heights = field["xs"], field["ys"], field["heights"]
+    nx = len(xs)
+
+    def ground(x, y):
+        fx = min(nx - 1.001, max(0, (x - xs[0]) / 200))
+        fy = min(len(ys) - 1.001, max(0, (y - ys[0]) / 200))
+        ix, iy = int(fx), int(fy)
+        tx, ty = fx - ix, fy - iy
+        return sum(heights[(iy+j)*nx+ix+i] * (tx if i else 1-tx) * (ty if j else 1-ty)
+                   for j in (0, 1) for i in (0, 1))
+
+    def ease(value):
+        t = min(1, max(0, value))
+        return t*t*(3-2*t)
+
+    def lateral(s):
+        return 6000 * ease((s - 60000) / 3500) * (1 - ease((s - 76000) / 6000))
+
+    stations = list(range(60000, 76000, 150)) + [76000]
+    raw = [max(ground(-12000-lateral(s)+side, s-60000) for side in (-450, 0, 450)) + 30
+           for s in stations]
+    graded = [max(z - abs(other-s)*.12 for other, z in zip(stations, raw)) for s in stations]
+
+    def height(s):
+        i = min(len(stations)-2, max(0, bisect.bisect_right(stations, s)-1))
+        t = min(1, max(0, (s-stations[i])/(stations[i+1]-stations[i])))
+        return graded[i]*(1-t) + graded[i+1]*t
+
+    result = []
+    for s, y, z in points:
+        if 58000 < s < 60000:
+            z += (graded[0] - 232) * ease((s-58000)/2000)
+        elif 60000 <= s <= 76000:
+            y, z = lateral(s), height(s)
+        elif 76000 < s < 82000:
+            y = lateral(s)
+            z = graded[-1] + (500 - graded[-1]) * ease((s-76000)/6000)
+        result.append((s, y, z))
+    return result
 
 
 def rotate_xy(point, yaw_degrees):

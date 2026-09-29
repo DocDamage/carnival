@@ -49,6 +49,14 @@ public:
         FString& OutError);
 
     UFUNCTION(BlueprintCallable, Category = "Carnival|Crowd")
+    static AActor* PlaceInitializedMetaHumanActor(
+        UMetaHumanInstance* Instance,
+        const FString& ActorLabel,
+        const FVector& Location,
+        const FRotator& Rotation,
+        FString& OutError);
+
+    UFUNCTION(BlueprintCallable, Category = "Carnival|Crowd")
     static UMassEntityConfigAsset* CreateMetaHumanMassEntityConfig(
         const FString& ObjectPath,
         const TArray<UMetaHumanInstance*>& CharacterInstances,

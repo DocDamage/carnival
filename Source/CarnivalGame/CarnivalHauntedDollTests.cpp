@@ -1,8 +1,10 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Misc/AutomationTest.h"
+#include "Misc/ScopeExit.h"
 #include "CarnivalHauntedDoll.h"
 #include "CarnivalDollAnimInstance.h"
+#include "CarnivalMissionSubsystem.h"
 #include "Animation/AnimSequence.h"
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -134,6 +136,67 @@ bool FHauntedDollEncounterTest::RunTest(const FString&)
     GameInstance->Shutdown();
     World->DestroyWorld(false);
     GEngine->DestroyWorldContext(World);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHauntedDollMissionScareTest, "Carnival.HauntedDoll.ScriptedMissionScare",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FHauntedDollMissionScareTest::RunTest(const FString&)
+{
+    UClass* DollClass = LoadClass<ACarnivalHauntedDoll>(nullptr,
+        TEXT("/Game/Carnival/Characters/PossessedDoll/BP_PossessedDoll.BP_PossessedDoll_C"));
+    UAnimSequence* HeadSnap = LoadObject<UAnimSequence>(nullptr,
+        TEXT("/Game/Carnival/Characters/PossessedDoll/Animations/Original/Doll_Head_Snap.Doll_Head_Snap"));
+    UAnimSequence* Lunge = LoadObject<UAnimSequence>(nullptr,
+        TEXT("/Game/Carnival/Characters/PossessedDoll/Animations/Original/Doll_Jumpscare_Lunge.Doll_Jumpscare_Lunge"));
+    if (!TestNotNull(TEXT("Doll Blueprint loads"), DollClass) || !HeadSnap || !Lunge)
+    {
+        AddError(TEXT("Mission scare animations must be present"));
+        return false;
+    }
+
+    UGameInstance* Instance = NewObject<UGameInstance>(GEngine);
+    Instance->InitializeStandalone(TEXT("DollMissionScare"));
+    UWorld* World = Instance->GetWorld();
+    ON_SCOPE_EXIT { World->EndPlay(EEndPlayReason::Quit); Instance->Shutdown(); World->DestroyWorld(false); GEngine->DestroyWorldContext(World); };
+    FURL URL;
+    URL.AddOption(TEXT("game=/Script/Engine.GameModeBase"));
+    World->SetGameMode(URL);
+    World->InitializeActorsForPlay(URL);
+    World->BeginPlay();
+
+    UCarnivalMissionSubsystem* Mission = Instance->GetSubsystem<UCarnivalMissionSubsystem>();
+    if (!TestNotNull(TEXT("Mission subsystem exists"), Mission)) return false;
+    FActorSpawnParameters Spawn;
+    Spawn.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    ACarnivalHauntedDoll* Doll = World->SpawnActor<ACarnivalHauntedDoll>(DollClass, FVector::ZeroVector, FRotator::ZeroRotator, Spawn);
+    ACharacter* Player = World->SpawnActor<ACharacter>(FVector(250.f, 0.f, 0.f), FRotator::ZeroRotator, Spawn);
+    if (!TestNotNull(TEXT("Mission doll spawns"), Doll) || !TestNotNull(TEXT("Scare witness spawns"), Player)) return false;
+    Doll->MissionHeadSnapAnimation = HeadSnap;
+    Doll->ScareAnimation = Lunge;
+    Doll->bMissionControlledInstance = true;
+    Doll->bEncounterEnabled = false;
+    TestFalse(TEXT("Scare cannot begin before the music-box objective"), Doll->BeginScriptedMissionScare(Player));
+
+    Mission->BeginStoryMission();
+    Mission->ReportMansionArrival();
+    Mission->CollectFoyerGlove();
+    Mission->CollectStudyLogAndKey();
+    Mission->ReportWorkerFound();
+    Mission->RecoverMusicBox();
+
+    TestTrue(TEXT("Music-box state starts the scripted scare"), Doll->BeginScriptedMissionScare(Player));
+    TestFalse(TEXT("Mission doll cannot enter autonomous detection"), Doll->CanDetectPawn(Player));
+    TestEqual(TEXT("Scripted scare counts once"), Doll->ScareCount, 1);
+    for (int32 I = 0; I < 600 && Mission->GetMissionState() == ECarnivalStoryMissionState::PlayDollScare; ++I)
+    {
+        ++GFrameCounter;
+        World->Tick(LEVELTICK_All, 1.f / 60.f);
+    }
+    TestEqual(TEXT("Head snap, blackout, lunge, and aftermath return the objective to escape"),
+        Mission->GetMissionState(), ECarnivalStoryMissionState::EscapeMansion);
+    TestFalse(TEXT("Mission scare does not start an autonomous chase"), Doll->bEncounterEnabled);
     return true;
 }
 #endif

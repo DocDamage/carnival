@@ -12,8 +12,11 @@
 #include "CarnivalWeaponBase.h"
 #include "CarnivalBuildComponent.h"
 #include "CarnivalActivityBase.h"
+#include "CarnivalMissionInteractionActor.h"
+#include "CarnivalMissionSubsystem.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
+#include "Engine/GameInstance.h"
 
 ACarnivalHUD::ACarnivalHUD()
 {
@@ -32,28 +35,101 @@ void ACarnivalHUD::DrawHUD()
 
 	ACarnivalPlayerController* PC = Cast<ACarnivalPlayerController>(GetOwningPlayerController());
 	ACarnivalPlayerCharacter* Char = PC ? Cast<ACarnivalPlayerCharacter>(PC->GetPawn()) : nullptr;
+	if (PC && PC->bControllerDisconnectPaused)
+	{
+		TArray<FString> Lines;
+		Lines.Add(TEXT("Reconnect the controller, or press any key to continue."));
+		Lines.Add(TEXT("Keyboard and controller input are both available."));
+		const float Width = FMath::Min(640.f, Canvas->ClipX - 40.f);
+		DrawBoxWithText((Canvas->ClipX - Width) * .5f, (Canvas->ClipY - 92.f) * .5f, Width, 92.f,
+			TEXT("CONTROLLER DISCONNECTED"), Lines,
+			FLinearColor(.015f,.02f,.03f,.96f), FLinearColor(1.f,.72f,.3f), FLinearColor::White);
+		return;
+	}
+	if (PC && PC->bSettingsMenuOpen)
+	{
+		DrawSettingsMenu(PC);
+		return;
+	}
 
 	DrawCrosshair();
 
 	if (bShowHelpOverlay)
 	{
 		DrawTelemetry(Char, PC);
+#if WITH_EDITOR
 		DrawFastTravelGuide();
 		DrawBuildModeHUD(Char);
+#endif
 	}
 
 	DrawActivityOverlay(Char, PC);
+	DrawStoryMissionOverlay(PC);
+	DrawStoryInteractionPrompt(Char, PC);
+	DrawPlayerRecoveryPrompt(Char, PC);
 	DrawRideInteraction(Char, PC);
 
-	if (bShowSettingsMenu)
-	{
-		DrawSettingsMenu(PC);
-	}
+}
+
+void ACarnivalHUD::DrawPlayerRecoveryPrompt(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC)
+{
+	if (!Canvas || !Char || !PC || !Char->CanRecoverToSafePosition()) return;
+	const FString Button = PC->bUsingGamepad
+		? (PC->bPlayStationPrompts ? TEXT("Circle") : TEXT("B"))
+		: TEXT("Backspace");
+	TArray<FString> Lines;
+	Lines.Add(FString::Printf(TEXT("[%s] Return to safe ground"), *Button));
+	const float Width = FMath::Min(360.f, Canvas->ClipX - 40.f);
+	DrawBoxWithText(Canvas->ClipX - Width - 20.f, Canvas->ClipY - 84.f, Width, 56.f,
+		TEXT("RECOVERY AVAILABLE"), Lines,
+		FLinearColor(.025f,.035f,.05f,.92f), FLinearColor(1.f,.72f,.3f), FLinearColor::White);
+}
+
+void ACarnivalHUD::DrawStoryMissionOverlay(ACarnivalPlayerController* PC)
+{
+	if (!PC || !PC->GetGameInstance()) return;
+	const UCarnivalMissionSubsystem* Mission = PC->GetGameInstance()->GetSubsystem<UCarnivalMissionSubsystem>();
+	if (!Mission) return;
+	const FText Objective = Mission->GetCurrentObjective();
+	const FText Feedback = Mission->GetPlayerFeedback();
+	if (Objective.IsEmpty() && Feedback.IsEmpty()) return;
+
+	TArray<FString> Lines;
+	if (!Objective.IsEmpty()) Lines.Add(Objective.ToString());
+	if (!Feedback.IsEmpty()) Lines.Add(Feedback.ToString());
+	const bool bComplete = Mission->IsMissionComplete();
+	const float Width = FMath::Min(680.f, Canvas->ClipX - 40.f);
+	const float Height = Lines.Num() > 1 ? 78.f : 58.f;
+	DrawBoxWithText((Canvas->ClipX - Width) * .5f, 20.f, Width, Height,
+		bComplete ? TEXT("INVESTIGATION COMPLETE") : TEXT("MISSING WORKER"), Lines,
+		FLinearColor(.025f,.035f,.05f,.88f),
+		bComplete ? FLinearColor(.35f,1.f,.55f) : FLinearColor(1.f,.78f,.35f),
+		FLinearColor::White);
+}
+
+void ACarnivalHUD::DrawStoryInteractionPrompt(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC)
+{
+	if (!Char || !PC) return;
+	ACarnivalMissionInteractionActor* Target = Char->FindNearbyMissionInteraction();
+	if (!Target) return;
+	const FString Button = PC->bUsingGamepad
+		? TEXT("D-pad Right")
+		: TEXT("E");
+	TArray<FString> Lines;
+	Lines.Add(FString::Printf(TEXT("[%s] %s"), *Button, *Target->GetPromptText().ToString()));
+	const float Width = FMath::Min(520.f, Canvas->ClipX - 40.f);
+	DrawBoxWithText((Canvas->ClipX - Width) * .5f, Canvas->ClipY - 88.f, Width, 58.f,
+		TEXT("INTERACT"), Lines,
+		FLinearColor(.025f,.035f,.05f,.92f), FLinearColor(1.f,.78f,.35f), FLinearColor::White);
 }
 
 void ACarnivalHUD::DrawRideInteraction(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC)
 {
 	if (!Char || !PC) return;
+	if (Char->FindNearbyMissionInteraction()) return;
+	if (Char->NearbyActivity && Char->NearbyActivity->ActivityState != ECarnivalActivityState::Active) return;
+	if (Char->ActiveActivity && (Char->ActiveActivity->ActivityState == ECarnivalActivityState::Completed
+		|| Char->ActiveActivity->ActivityState == ECarnivalActivityState::Failed)) return;
 	const bool bRiding = Char->RidePassenger && Char->RidePassenger->IsRiding();
 	UCarnivalRideOperationComponent* Operation = Char->OperatingRide;
 	if (!Operation && bRiding)
@@ -108,21 +184,12 @@ void ACarnivalHUD::DrawRideInteraction(ACarnivalPlayerCharacter* Char, ACarnival
 
 void ACarnivalHUD::ToggleSettingsMenu()
 {
-	bShowSettingsMenu = !bShowSettingsMenu;
-	if (APlayerController* PC = GetOwningPlayerController())
+	if (ACarnivalPlayerController* PC = Cast<ACarnivalPlayerController>(GetOwningPlayerController()))
 	{
-		PC->SetShowMouseCursor(bShowSettingsMenu);
-		if (bShowSettingsMenu)
-		{
-			FInputModeGameAndUI Mode;
-			PC->SetInputMode(Mode);
-		}
-		else
-		{
-			FInputModeGameOnly Mode;
-			PC->SetInputMode(Mode);
-		}
+		PC->ToggleSettingsMenu();
+		return;
 	}
+	bShowSettingsMenu = !bShowSettingsMenu;
 }
 
 void ACarnivalHUD::DrawTelemetry(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC)
@@ -171,13 +238,15 @@ void ACarnivalHUD::DrawTelemetry(ACarnivalPlayerCharacter* Char, ACarnivalPlayer
 		Lines.Add(TEXT("Combat: [LMB] Attack / Shoot / Combo"));
 	}
 
-	// Motorcycle
-	// Vehicles
+	const bool bPad = PC && PC->bUsingGamepad;
+	const bool bPlayStation = PC && PC->bPlayStationPrompts;
+	const FString MountButton = bPad ? (bPlayStation ? TEXT("Triangle") : TEXT("Y")) : TEXT("F");
 	Lines.Add(TEXT("---"));
-	Lines.Add(TEXT("Motorcycle: [E] Mount / Dismount"));
-	Lines.Add(TEXT("Driving: [W/S] Throttle/Reverse | [A/D] Steer | [Space] Brake"));
-	Lines.Add(TEXT("Vehicles (Bike / Boat / Hover): [E] Mount / Dismount"));
-	Lines.Add(TEXT("Driving: [W/S] Throttle/Reverse | [A/D] Steer | [Space] Brake / Boost"));
+	Lines.Add(FString::Printf(TEXT("Motorcycle: [%s] Mount / Dismount / Recover"), *MountButton));
+	Lines.Add(bPad
+		? TEXT("Driving: [R2/L2] Throttle/Brake | [Left Stick] Steer")
+		: TEXT("Driving: [W/S] Throttle/Reverse | [A/D] Steer | [Space] Brake"));
+	Lines.Add(FString::Printf(TEXT("Other vehicles: [%s] Mount / Dismount"), *MountButton));
 	Lines.Add(TEXT("Settings / Physics Toggle: [M] or [Tab]"));
 
 	DrawBoxWithText(20.0f, 20.0f, 420.0f, 240.0f,
@@ -269,27 +338,30 @@ void ACarnivalHUD::DrawBuildModeHUD(ACarnivalPlayerCharacter* Char)
 void ACarnivalHUD::DrawSettingsMenu(ACarnivalPlayerController* PC)
 {
 	TArray<FString> Lines;
-	Lines.Add(TEXT("1. MOTORCYCLE PHYSICS MODE:"));
-	Lines.Add(TEXT("   - Arcade Mode: Responsive, auto-balancing, snappy arcade leaning."));
-	Lines.Add(TEXT("   - Chaos Mode: 2-Wheel dynamic physics simulation, momentum, drift."));
-	Lines.Add(TEXT("   Toggle with: [1] Arcade  |  [2] Chaos"));
+	const FString Selected = TEXT("> ");
+	const FString Unselected = TEXT("  ");
+	const FString Confirm = PC && PC->bPlayStationPrompts ? TEXT("Cross") : TEXT("A");
+	const FString Back = PC && PC->bPlayStationPrompts ? TEXT("Circle") : TEXT("B");
+	auto Row = [&](int32 Index, const FString& Text)
+	{
+		Lines.Add((PC && PC->SettingsMenuSelection == Index ? Selected : Unselected) + Text);
+	};
+	Row(0, FString::Printf(TEXT("Stick look speed: %.0f deg/sec"), PC ? PC->StickLookDegreesPerSecond : 120.f));
+	Row(1, FString::Printf(TEXT("Stick dead zone: %.2f"), PC ? PC->StickDeadZone : .12f));
+	Row(2, FString::Printf(TEXT("Vertical look: %s"), PC && PC->bInvertLookY ? TEXT("Inverted") : TEXT("Normal")));
+	Row(3, FString::Printf(TEXT("Sprint: %s"), PC && PC->bSprintToggleMode ? TEXT("Toggle") : TEXT("Hold")));
+	Row(4, TEXT("Restore input defaults"));
 	Lines.Add(TEXT(""));
-	Lines.Add(TEXT("2. FAST TRAVEL SHORTCUTS:"));
-	Lines.Add(TEXT("   [F1] Carnival | [F2] Mansion | [F3] Town | [F4] Lighthouse"));
-	Lines.Add(TEXT("   [F5] Castle   | [F6] Arena   | [F7] Mars"));
-	Lines.Add(TEXT(""));
-	Lines.Add(TEXT("3. IN-GAME BUILDING SYSTEM:"));
-	Lines.Add(TEXT("   Press [B] at any time to construct ramps, fortresses, and tracks."));
-	Lines.Add(TEXT(""));
-	Lines.Add(TEXT("Press [M] or [Tab] to Close Settings Menu"));
+	Lines.Add(TEXT("D-pad / arrows: select and adjust. ") + Confirm + TEXT(": select. ") + Back + TEXT(" / Options: close."));
+	Lines.Add(TEXT("Keyboard: arrows, Enter, Escape. Mouse look remains direct."));
 
-	float Width = 580.0f;
-	float Height = 300.0f;
+	float Width = FMath::Min(720.f, Canvas->ClipX - 40.f);
+	float Height = 190.0f;
 	float X = (Canvas->ClipX - Width) * 0.5f;
 	float Y = (Canvas->ClipY - Height) * 0.5f;
 
 	DrawBoxWithText(X, Y, Width, Height,
-		TEXT("SETTINGS & GAMEPLAY GUIDE"),
+		TEXT("PLAYER SETTINGS"),
 		Lines,
 		FLinearColor(0.05f, 0.05f, 0.12f, 0.92f),
 		FLinearColor(0.4f, 0.9f, 1.0f, 1.0f),
@@ -343,6 +415,8 @@ void ACarnivalHUD::DrawActivityOverlay(ACarnivalPlayerCharacter* Char, ACarnival
 	{
 		return;
 	}
+	const bool bMissionInteractionFocused = Char->FindNearbyMissionInteraction() != nullptr;
+	const FString ContextButton = PC && PC->bUsingGamepad ? TEXT("D-pad Right") : TEXT("E");
 
 	if (Char->ActiveActivity)
 	{
@@ -353,6 +427,11 @@ void ACarnivalHUD::DrawActivityOverlay(ACarnivalPlayerCharacter* Char, ACarnival
 			float Height = 80.0f;
 			float X = (Canvas->ClipX - Width) * 0.5f;
 			float Y = 20.0f;
+			if (PC && PC->GetGameInstance())
+			{
+				const UCarnivalMissionSubsystem* Mission = PC->GetGameInstance()->GetSubsystem<UCarnivalMissionSubsystem>();
+				if (Mission && Mission->IsMissionActive()) Y = 92.0f;
+			}
 
 			TArray<FString> Lines;
 			Lines.Add(Act->GetCurrentObjectiveText());
@@ -366,7 +445,7 @@ void ACarnivalHUD::DrawActivityOverlay(ACarnivalPlayerCharacter* Char, ACarnival
 				BorderCol,
 				FLinearColor(0.95f, 0.95f, 0.95f, 1.0f));
 		}
-		else if (Act->ActivityState == ECarnivalActivityState::Completed)
+		else if (!bMissionInteractionFocused && Act->ActivityState == ECarnivalActivityState::Completed)
 		{
 			float Width = 520.0f;
 			float Height = 120.0f;
@@ -377,7 +456,7 @@ void ACarnivalHUD::DrawActivityOverlay(ACarnivalPlayerCharacter* Char, ACarnival
 			Lines.Add(FString::Printf(TEXT("Challenge: %s"), *Act->ActivityName));
 			Lines.Add(FString::Printf(TEXT("Completed in: %.1fs  |  Rating: %s"), Act->ElapsedTime, *Act->GetMedalRating()));
 			Lines.Add(FString::Printf(TEXT("Final Score: %d points"), Act->CurrentScore));
-			Lines.Add(TEXT("Press [E] to Dismiss"));
+			Lines.Add(FString::Printf(TEXT("Press [%s] to Dismiss"), *ContextButton));
 
 			DrawBoxWithText(X, Y, Width, Height,
 				TEXT("=== ACTIVITY COMPLETED! ==="),
@@ -386,7 +465,7 @@ void ACarnivalHUD::DrawActivityOverlay(ACarnivalPlayerCharacter* Char, ACarnival
 				FLinearColor(0.2f, 1.0f, 0.3f, 1.0f),
 				FLinearColor(0.95f, 0.95f, 0.95f, 1.0f));
 		}
-		else if (Act->ActivityState == ECarnivalActivityState::Failed)
+		else if (!bMissionInteractionFocused && Act->ActivityState == ECarnivalActivityState::Failed)
 		{
 			float Width = 480.0f;
 			float Height = 100.0f;
@@ -396,7 +475,7 @@ void ACarnivalHUD::DrawActivityOverlay(ACarnivalPlayerCharacter* Char, ACarnival
 			TArray<FString> Lines;
 			Lines.Add(FString::Printf(TEXT("Challenge: %s"), *Act->ActivityName));
 			Lines.Add(TEXT("Time expired! You didn't complete the objective in time."));
-			Lines.Add(TEXT("Press [E] to Retry"));
+			Lines.Add(FString::Printf(TEXT("Press [%s] to Retry"), *ContextButton));
 
 			DrawBoxWithText(X, Y, Width, Height,
 				TEXT("=== CHALLENGE FAILED ==="),
@@ -406,7 +485,8 @@ void ACarnivalHUD::DrawActivityOverlay(ACarnivalPlayerCharacter* Char, ACarnival
 				FLinearColor(0.95f, 0.95f, 0.95f, 1.0f));
 		}
 	}
-	else if (Char->NearbyActivity && Char->NearbyActivity->ActivityState != ECarnivalActivityState::Active)
+	else if (!bMissionInteractionFocused && Char->NearbyActivity
+		&& Char->NearbyActivity->ActivityState != ECarnivalActivityState::Active)
 	{
 		ACarnivalActivityBase* Act = Char->NearbyActivity;
 		float Width = 560.0f;
@@ -416,10 +496,10 @@ void ACarnivalHUD::DrawActivityOverlay(ACarnivalPlayerCharacter* Char, ACarnival
 
 		TArray<FString> Lines;
 		Lines.Add(FString::Printf(TEXT("%s - %s"), *Act->ActivityName, *Act->Description));
-		Lines.Add(TEXT("Press [E] to Begin Challenge!"));
+		Lines.Add(FString::Printf(TEXT("Press [%s] to Begin Challenge!"), *ContextButton));
 
 		DrawBoxWithText(X, Y, Width, Height,
-			TEXT("[E] START ACTIVITY"),
+			FString::Printf(TEXT("[%s] START ACTIVITY"), *ContextButton),
 			Lines,
 			FLinearColor(0.04f, 0.03f, 0.08f, 0.88f),
 			FLinearColor(1.0f, 0.8f, 0.2f, 1.0f),

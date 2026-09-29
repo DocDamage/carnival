@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "Scripts"))
 from industrial_hospital_route_config import (
     GATE, HOSPITAL_ARCH_LEVEL, HOSPITAL_EXTERIOR_LEVEL, HOSPITAL_LIGHT_LEVEL,
     HOSPITAL_YAW, MAIN_MAP, ROUTE_LEVEL, ROUTE_WORLD_YAW, SLUM_LEVEL,
-    hospital_level_transform, slum_level_transform,
+    hospital_level_transform, slum_level_transform, hospital_setdress_level, HOSPITAL_SETDRESS_SOURCE,
 )
 
 OUT = ROOT / "Saved/IndustrialHospital"
@@ -59,7 +59,7 @@ def connect():
         (SLUM_LEVEL, slum_location, slum_yaw),
         (HOSPITAL_EXTERIOR_LEVEL, hospital_location, HOSPITAL_YAW),
         (HOSPITAL_ARCH_LEVEL, hospital_location, HOSPITAL_YAW),
-        ("/Game/Hospital_Meshingun/Environment/Map/LV_Hospital_Main_SetDress", hospital_location, HOSPITAL_YAW),
+        (hospital_setdress_level(), hospital_location, HOSPITAL_YAW),
         ("/Game/Hospital_Meshingun/Environment/Map/LV_Hospital_Main_Decal", hospital_location, HOSPITAL_YAW),
         ("/Game/Hospital_Meshingun/Environment/Map/LV_Hospital_VFX", hospital_location, HOSPITAL_YAW),
         ("/Game/Hospital_Meshingun/Environment/Map/LV_Hospital_Volume", hospital_location, HOSPITAL_YAW),
@@ -69,6 +69,7 @@ def connect():
     # with roll instead of yaw. Remove only this branch's streaming entries,
     # then re-add them with the corrected transforms.
     placement_paths = {path for path, _, _ in placements}
+    placement_paths.add(HOSPITAL_SETDRESS_SOURCE)
     existing_levels = {}
     for level in unreal.EditorLevelUtils.get_levels(world):
         path = level.get_path_name().split(":PersistentLevel")[0].split(".")[0]

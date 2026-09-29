@@ -6,6 +6,7 @@
 #include "Engine/World.h"
 #include "MassCrowdMemberTrait.h"
 #include "MassEntityConfigAsset.h"
+#include "MassLODTrait.h"
 #include "MassEntitySpawnDataGeneratorBase.h"
 #include "MassEntityZoneGraphSpawnPointsGenerator.h"
 #include "MassSpawner.h"
@@ -20,6 +21,10 @@
 #include "Item/MetaHumanCrowdGroomEditorPipeline.h"
 #include "Item/MetaHumanCrowdGroomPipeline.h"
 #include "MetaHumanCrowdPipeline.h"
+#include "MetaHumanCharacterActorInterface.h"
+#include "MetaHumanCollectionPipeline.h"
+#include "Animation/AnimSequence.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Item/MetaHumanCrowdCharacterEditorPipeline.h"
 #include "MetaHumanInstance.h"
 #include "MetaHumanItemPipeline.h"
@@ -32,6 +37,7 @@
 #include "ZoneGraphSubsystem.h"
 #include "ZoneShapeActor.h"
 #include "ZoneShapeComponent.h"
+#include "CarnivalMassPrerequisiteTrait.h"
 #include "UObject/Package.h"
 #include "UObject/SoftObjectPath.h"
 #include "UObject/UnrealType.h"
@@ -488,6 +494,133 @@ UMetaHumanInstance* UCarnivalCrowdEditorLibrary::CreateCrowdInstanceAsset(
     return Instance;
 }
 
+AActor* UCarnivalCrowdEditorLibrary::PlaceInitializedMetaHumanActor(
+    UMetaHumanInstance* Instance,
+    const FString& ActorLabel,
+    const FVector& Location,
+    const FRotator& Rotation,
+    FString& OutError)
+{
+    OutError.Reset();
+    if (!Instance)
+    {
+        OutError = TEXT("A built MetaHuman Instance is required.");
+        return nullptr;
+    }
+
+    const UMetaHumanCollection* Collection = Instance->GetMetaHumanCollection();
+    const UMetaHumanCollectionPipeline* Pipeline = Collection ? Collection->GetPipeline() : nullptr;
+    const TSubclassOf<AActor> ActorClass = Pipeline ? Pipeline->GetActorClass() : nullptr;
+    if (!ActorClass || !ActorClass->ImplementsInterface(UMetaHumanCharacterActorInterface::StaticClass()))
+    {
+        OutError = TEXT("The MetaHuman Collection pipeline has no actor class implementing MetaHumanCharacterActorInterface.");
+        return nullptr;
+    }
+    if (!GEditor)
+    {
+        OutError = TEXT("The Unreal Editor is not available.");
+        return nullptr;
+    }
+
+    UWorld* World = GEditor->GetEditorWorldContext().World();
+    if (!World)
+    {
+        OutError = TEXT("No editor world is loaded. Open the target level before placing the MetaHuman actor.");
+        return nullptr;
+    }
+
+    AActor* Actor = nullptr;
+    if (!ActorLabel.IsEmpty())
+    {
+        for (TActorIterator<AActor> It(World); It; ++It)
+        {
+            if (It->GetActorLabel() == ActorLabel)
+            {
+                Actor = *It;
+                if (!Actor->IsA(ActorClass))
+                {
+                    OutError = FString::Printf(TEXT("An actor named %s already exists with class %s."), *ActorLabel, *Actor->GetClass()->GetName());
+                    return nullptr;
+                }
+                break;
+            }
+        }
+    }
+
+    if (!Actor)
+    {
+        FActorSpawnParameters SpawnParameters;
+        SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+        SpawnParameters.ObjectFlags |= RF_Transactional;
+        Actor = World->SpawnActor<AActor>(ActorClass, FTransform(Rotation, Location), SpawnParameters);
+    }
+    if (!Actor)
+    {
+        OutError = FString::Printf(TEXT("Could not spawn %s."), *ActorClass->GetName());
+        return nullptr;
+    }
+
+    Actor->Modify();
+    Actor->SetActorTransform(FTransform(Rotation, Location));
+    if (!ActorLabel.IsEmpty())
+    {
+        Actor->SetActorLabel(ActorLabel);
+    }
+    Actor->Tags.AddUnique(FName(TEXT("CarnivalMissionWorker")));
+    IMetaHumanCharacterActorInterface::Execute_SetMetaHumanInstance(Actor, Instance);
+
+    UMetaHumanInstance* AppliedInstance = IMetaHumanCharacterActorInterface::Execute_GetMetaHumanInstance(Actor);
+    if (AppliedInstance != Instance)
+    {
+        OutError = TEXT("The MetaHuman actor did not retain the requested instance.");
+        return nullptr;
+    }
+
+    const FMetaHumanCrowdAssemblyOutput* Assembly = Instance->GetAssemblyOutput().GetPtr<FMetaHumanCrowdAssemblyOutput>();
+    if (Assembly)
+    {
+        const TObjectPtr<UAnimSequence>* IdleEntry = Assembly->AnimBPAnimations.Find(FName(TEXT("Idle")));
+        UAnimSequence* IdleAnimation = IdleEntry ? IdleEntry->Get() : nullptr;
+        if (!IdleAnimation && Assembly->AnimBPAnimations.Num() > 0)
+        {
+            IdleAnimation = Assembly->AnimBPAnimations.CreateConstIterator()->Value.Get();
+        }
+        USkeletalMeshComponent* Body = nullptr;
+        TArray<USkeletalMeshComponent*> SkeletalComponents;
+        Actor->GetComponents<USkeletalMeshComponent>(SkeletalComponents);
+        for (USkeletalMeshComponent* Component : SkeletalComponents)
+        {
+            if (Component && Component->GetFName() == FName(TEXT("Body")))
+            {
+                Body = Component;
+                break;
+            }
+        }
+        if (Body && IdleAnimation)
+        {
+            Body->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+            Body->SetAnimation(IdleAnimation);
+            Body->Play(true);
+        }
+        else
+        {
+            OutError = Body
+                ? TEXT("The MetaHuman collection has no baked idle animation.")
+                : TEXT("The initialized MetaHuman actor has no Body skeletal mesh component.");
+        }
+    }
+    else
+    {
+        OutError = TEXT("The MetaHuman instance did not produce a crowd assembly output.");
+    }
+
+    Actor->SetActorEnableCollision(false);
+
+    World->GetCurrentLevel()->MarkPackageDirty();
+    Actor->MarkPackageDirty();
+    return Actor;
+}
+
 UMassEntityConfigAsset* UCarnivalCrowdEditorLibrary::CreateMetaHumanMassEntityConfig(
     const FString& ObjectPath,
     const TArray<UMetaHumanInstance*>& CharacterInstances,
@@ -514,6 +647,17 @@ UMassEntityConfigAsset* UCarnivalCrowdEditorLibrary::CreateMetaHumanMassEntityCo
     }
 
     Config->Modify();
+    if (!Config->AddTrait(UCarnivalMassPrerequisiteTrait::StaticClass()))
+    {
+        OutError = TEXT("Could not add the required Mass actor and transform fragments to the crowd config.");
+        return nullptr;
+    }
+    if (!Config->AddTrait(UMassDistanceLODCollectorTrait::StaticClass()))
+    {
+        OutError = TEXT("Could not add the Mass distance LOD collector trait to the crowd config.");
+        return nullptr;
+    }
+
     UMetaHumanMassCrowdVisualizationTrait* Visualization = Cast<UMetaHumanMassCrowdVisualizationTrait>(Config->AddTrait(UMetaHumanMassCrowdVisualizationTrait::StaticClass()));
     if (!Visualization)
     {

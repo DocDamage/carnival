@@ -1,6 +1,6 @@
 # Controller and ride controls — demo requirements
 
-The user requires every carnival ride to be usable and run by an NPC attendant, additional player operator controls where appropriate, and full modern controller support with controls reminiscent of GTA V. **PlayStation 5 DualSense is the primary test controller.** This document specifies the intended result; the mappings and features below are not yet implemented or hardware-validated.
+The user requires every carnival ride to be usable and run by an NPC attendant, additional player operator controls where appropriate, and full modern controller support with controls reminiscent of GTA V. **PlayStation 5 DualSense is the primary test controller.** This document defines the target; partial native bindings are in place, but the complete feature set is not implemented or hardware-validated.
 
 The layout is a proposed GTA-inspired arrangement for this game's actions, not a claim of exact parity with every GTA V binding. Preserve familiar stick movement/camera control, face-button running and jumping, triangle/Y entry and exit, and trigger-based driving. Use the same physical control positions across controller families where possible.
 
@@ -27,6 +27,8 @@ The layout is a proposed GTA-inspired arrangement for this game's actions, not a
 | Operator station: select / activate / back | D-pad / Cross / Circle | D-pad / A / B | Only supported operations are shown; direct-control levers can use an appropriate analog input. |
 
 Keyboard and mouse remain fully supported. Keep E for ordinary interaction and use F for vehicle/ride entry if adopting the proposed separation. Escape pauses. Gameplay contexts must ensure that confirming a menu does not also sprint, activate a world interaction, or operate a vehicle.
+
+Current interaction work separates mission props onto the existing E / D-pad Right context action. The closest visible mission object wins over activity and operator interactions, while F / Triangle remains vehicle/ride entry, passenger exit, and motorcycle recovery. On foot, F / Triangle rights a nearby overturned parked bike; a second press mounts it. Context prompts hide competing activity/operator prompts when a mission object is focused. This priority is staged in native code and still needs UE 5.8 PIE acceptance; doors and other non-mission interactables are not yet integrated.
 
 **Controller support means the complete experience**
 
@@ -71,7 +73,7 @@ The known names above are a starting inventory. Audit the runtime world and ligh
 
 **Implementation findings and approach**
 
-The native controller already uses Enhanced Input with separate player and motorcycle mapping contexts. The examined setup script configures keyboard/mouse mappings; its contents do not establish full gamepad support. The current native look handler passes values directly to yaw/pitch, vehicle actions lack release/cancel resets, and a combined interact/mount action will need separation or deliberate contextual arbitration. These are implementation tasks, not just button labels.
+The native controller already uses Enhanced Input with separate player and motorcycle mapping contexts. Mouse-delta look and stick-rate look are separate; the stick handler applies degrees-per-second multiplied by frame delta. The controller tracks the last active gamepad device, clears player and motorcycle inputs when that device disconnects, pauses single-player play, and shows a resume prompt. Deliberate input from a keyboard or reconnected controller resumes play. `Carnival.Input.ControllerDisconnectRecovery` covers this path in a simulated world; physical Windows hot-plug and packaged-build behavior remain unverified. Saved remapping, persistent look/sprint/vibration settings, controller-focused menus, and full-game controller-only play remain to be implemented and validated.
 
 Extend gameplay mappings with distinct walking, vehicle, ride-passenger, operator, and UI contexts. Unreal's Enhanced Input supports runtime context changes, analog actions, dead zones, and remapping, which fits this design. [Epic: Enhanced Input](https://dev.epicgames.com/documentation/unreal-engine/enhanced-input-in-unreal-engine).
 
@@ -95,3 +97,22 @@ Device input is a separate task from gameplay mappings and button artwork. Evalu
 - [ ] The wider supported controller matrix is tested, with device/connection/backend results recorded separately.
 
 Related files: `Docs/FIRST_DEMO_DESIGN.md` and `Docs/PLAYABLE_DEMO_CHECKLIST.md`.
+
+**Current motorcycle bindings (September 27 continuation)**
+
+| Action | Controller | Keyboard |
+|---|---|---|
+| Throttle | R2 | W (S reverse) |
+| Brake, then reverse after stopping | L2 | S reverses; Space brakes only |
+| Steer | Left stick sideways | A / D |
+| Rear brake / slide | R1 | Left Alt |
+| Pull back / wheelie / nose up | Left stick back | Left Shift |
+| Lean forward / nose down | Left stick forward | Left Ctrl |
+| Camera | Right stick | Mouse |
+| Mount / dismount; recover an overturned or stuck bike | Triangle | F |
+
+The saved Enhanced Input mappings and action release behavior pass simulated raw-key tests. Dismount checks supported capsule clearance and the path out, tries the other side when blocked, and keeps the player mounted when no exit is available. It now prefers the lowest clear landing on sloped ground so the exit montage travels downhill. Native live-graph tests tick and sample both fitted-derived dismounts on flat ground and a 10-degree cross-slope; sampled planted-foot error stays below 1.6 cm through 0.70 seconds. The scripted UE 5.8 PIE run captures both fitted mounts and staged dismounts with **28 rendered frames and 83 graph/bone snapshots**, passing its 50-check recovery matrix. The on-foot Triangle/F action rights an overturned parked bike or a bike stuck after throttle/reverse is blocked for 1.25 seconds; recovery checks nearby ground and chassis clearance, clears stale driving input, and keeps the rider mounted. The PIE captures support contact and overall exit spacing, but the bright environment/HUD limit detailed clothing-intersection review. Physical DualSense compatibility and final handling feel remain unverified. Balance and sliding currently affect arcade physics; the selectable Chaos mode still requires equivalent support.
+
+The always-on HUD control sheet now shows `[F]` on keyboard and the configured gamepad face button (Triangle for PlayStation prompts, Y for the other-pad profile) for motorcycle mount/dismount/recovery. It also shows trigger/stick driving hints when gamepad input is active. Mission interactions retain their separate `E`/D-pad Right action. This source correction was made after the September 28 package smoke test, so it needs a package rebuild and device verification.
+
+The September 28 editor update also adds active-device disconnect handling: the game clears stored throttle, steering, braking, handbrake, rider-balance, sprint, jump, movement, and pressed-key state before pausing. A reconnect event alone leaves the game paused; the first deliberate button or stick input resumes it. The editor build and simulated controller-disconnect automation pass, but this does not close the DualSense Windows-backend or package acceptance checks.

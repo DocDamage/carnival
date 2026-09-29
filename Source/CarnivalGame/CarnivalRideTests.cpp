@@ -263,6 +263,66 @@ bool FRideInputTest::RunTest(const FString&)
     Key(EKeys::Gamepad_LeftTriggerAxis, IE_Axis, 0.f); Process();
     Bike->CurrentSpeed = 300.f; Bike->Tick(.05f);
     TestTrue(TEXT("Released brake restores normal coasting"), Bike->CurrentSpeed > BrakedSpeed);
+    if (!TestNotNull(TEXT("L2 brake reverse action installed"), PC->BrakeReverseAction)) return false;
+    auto* Ground = World->SpawnActor<AActor>();
+    auto* GroundBox = NewObject<UBoxComponent>(Ground);
+    Ground->SetRootComponent(GroundBox); GroundBox->SetBoxExtent(FVector(5000,5000,20));
+    GroundBox->SetCollisionProfileName(TEXT("BlockAll")); GroundBox->RegisterComponent();
+    Ground->SetActorLocation(FVector(10000,0,-20));
+    Bike->SetActorLocation(FVector(10000,0,0)); Bike->SetActorRotation(FRotator::ZeroRotator);
+    Bike->bIsAirborne=false; Bike->VerticalVelocity=0.f; Bike->CurrentSpeed=300.f;
+    Key(EKeys::Gamepad_LeftTriggerAxis, IE_Axis, .8f); Process();
+    bool bStoppedBeforeReverse=false;
+    for (int32 I=0; I<120; ++I)
+    {
+        const float Before=Bike->CurrentSpeed;
+        Bike->Tick(1.f/60.f);
+        if (Before>=0.f && FMath::IsNearlyZero(Bike->CurrentSpeed)) bStoppedBeforeReverse=true;
+        if (Bike->CurrentSpeed<0.f) TestTrue(TEXT("L2 passes through stop before reversing"),bStoppedBeforeReverse);
+    }
+    TestTrue(TEXT("Held L2 backs bike up with analog speed"),Bike->CurrentSpeed < -100.f && Bike->CurrentSpeed > -Bike->ReverseSpeed);
+    Key(EKeys::Gamepad_RightTriggerAxis, IE_Axis, 1.f); Process();
+    for (int32 I=0; I<60; ++I) Bike->Tick(1.f/60.f);
+    TestTrue(TEXT("Opposing triggers stop and hold bike"),FMath::IsNearlyZero(Bike->CurrentSpeed));
+    Key(EKeys::Gamepad_RightTriggerAxis, IE_Axis, 0.f); Process();
+    Key(EKeys::Gamepad_LeftTriggerAxis, IE_Axis, 0.f); Process();
+    Bike->CurrentSpeed=-200.f; Bike->Tick(.1f);
+    TestTrue(TEXT("L2 release coasts reverse without sticky input"),FMath::IsNearlyEqual(Bike->CurrentSpeed,-160.f,1.f));
+    Key(EKeys::SpaceBar, IE_Pressed, 1.f); Process();
+    Bike->CurrentSpeed=0.f;
+    for (int32 I=0; I<60; ++I) Bike->Tick(1.f/60.f);
+    TestTrue(TEXT("Keyboard dedicated brake never selects reverse"),FMath::IsNearlyZero(Bike->CurrentSpeed));
+    Key(EKeys::SpaceBar, IE_Released, 0.f); Process();
+    Ground->Destroy();
+    if (!TestNotNull(TEXT("Rear brake action installed"), PC->HandbrakeAction)
+        || !TestNotNull(TEXT("Rider balance action installed"), PC->RiderBalanceAction)) return false;
+    Key(EKeys::Gamepad_RightShoulder, IE_Pressed, 1.f); Process();
+    Bike->CurrentSpeed = 1500.f; Bike->Tick(.1f);
+    TestTrue(TEXT("R1 dispatches rear brake"), FMath::IsNearlyEqual(Bike->CurrentSpeed, 1401.f, 1.f));
+    Key(EKeys::Gamepad_RightShoulder, IE_Released, 0.f); Process();
+    Bike->CurrentSpeed = 1500.f; Bike->Tick(.1f);
+    TestTrue(TEXT("Released R1 clears rear brake"), FMath::IsNearlyEqual(Bike->CurrentSpeed, 1460.f, 1.f));
+    Bike->SetActorLocation(FVector(4000,0,1000));
+    Bike->SetActorRotation(FRotator::ZeroRotator);
+    Bike->VerticalVelocity = 0.f; Bike->bIsAirborne = true;
+    Key(EKeys::Gamepad_LeftY, IE_Axis, -.8f); Process();
+    Bike->Tick(.1f);
+    const float PulledPitch = Bike->GetActorRotation().Pitch;
+    TestTrue(TEXT("Pulling left stick back pitches nose up"), PulledPitch > 3.f);
+    Key(EKeys::Gamepad_LeftY, IE_Axis, 0.f); Process();
+    Key(EKeys::Gamepad_RightY, IE_Axis, .8f); Process();
+    Bike->Tick(.1f);
+    TestTrue(TEXT("Balance release recovers pitch while right stick only looks"), Bike->GetActorRotation().Pitch < PulledPitch);
+    Key(EKeys::Gamepad_RightY, IE_Axis, 0.f); Process();
+    Key(EKeys::LeftShift, IE_Pressed, 1.f); Process();
+    TestTrue(TEXT("Keyboard wheelie input maps positive balance"), Input->GetActionValue(PC->RiderBalanceAction).Get<float>() > .9f);
+    Key(EKeys::LeftShift, IE_Released, 0.f); Process();
+    Key(EKeys::LeftControl, IE_Pressed, 1.f); Process();
+    TestTrue(TEXT("Keyboard forward lean maps negative balance"), Input->GetActionValue(PC->RiderBalanceAction).Get<float>() < -.9f);
+    Key(EKeys::LeftControl, IE_Released, 0.f); Process();
+    Key(EKeys::LeftAlt, IE_Pressed, 1.f); Process();
+    TestTrue(TEXT("Keyboard rear brake maps held action"), Input->GetActionValue(PC->HandbrakeAction).Get<bool>());
+    Key(EKeys::LeftAlt, IE_Released, 0.f); Process();
     Bike->CurrentRider = nullptr;
     return true;
 }

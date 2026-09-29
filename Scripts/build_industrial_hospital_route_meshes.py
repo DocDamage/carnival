@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(r"F:\Carnival")
 sys.path.insert(0, str(ROOT / "Scripts"))
 from industrial_hospital_route_config import (
-    OUT, ROAD_CONTROL_POINTS, ROAD_CHUNK_LENGTH_CM, route_manifest,
+    OUT, ROAD_CONTROL_POINTS, ROAD_CHUNK_LENGTH_CM, route_manifest, apply_slum_street_alignment,
 )
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -44,7 +44,7 @@ def smooth_path(controls, step=150.0):
     return points
 
 
-points = smooth_path(ROAD_CONTROL_POINTS)
+points = apply_slum_street_alignment(smooth_path(ROAD_CONTROL_POINTS))
 distances = [0.0]
 for a, b in zip(points, points[1:]):
     distances.append(distances[-1] + distance(a, b))

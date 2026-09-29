@@ -23,7 +23,12 @@ public class CarnivalGame : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
-			"CarnivalPopulation"
-		});
+            "CarnivalPopulation",
+            "MetaHumanCharacterPalette",
+            "MetaHumanCrowd"
+        });
+
+        if (Target.bBuildEditor)
+            PrivateDependencyModuleNames.Add("UnrealEd");
 	}
 }

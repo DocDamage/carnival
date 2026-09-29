@@ -7,9 +7,36 @@
 #include "CarnivalMotorcycle.h"
 #include "CarnivalBuildComponent.h"
 #include "CarnivalRideOperationComponent.h"
+#include "CarnivalHUD.h"
 #include "InputKeyEventArgs.h"
 #include "Blueprint/UserWidget.h"
+#include "Engine/GameInstance.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/ConfigCacheIni.h"
+
+namespace
+{
+constexpr const TCHAR* CarnivalInputSettingsSection = TEXT("Carnival.InputSettings");
+constexpr int32 CarnivalInputSettingsRows = 5;
+
+FVector2D ApplyRadialDeadZone(FVector2D Value, float DeadZone)
+{
+	Value = Value.GetClampedToMaxSize(1.f);
+	const float Magnitude = Value.Size();
+	if (Magnitude <= DeadZone || Magnitude <= UE_SMALL_NUMBER)
+	{
+		return FVector2D::ZeroVector;
+	}
+	return Value.GetSafeNormal() * FMath::Clamp((Magnitude - DeadZone) / (1.f - DeadZone), 0.f, 1.f);
+}
+
+float ApplyAxisDeadZone(float Value, float DeadZone)
+{
+	const float Magnitude = FMath::Abs(Value);
+	if (Magnitude <= DeadZone) return 0.f;
+	return FMath::Sign(Value) * FMath::Clamp((Magnitude - DeadZone) / (1.f - DeadZone), 0.f, 1.f);
+}
+}
 
 ACarnivalPlayerController::ACarnivalPlayerController()
 {
@@ -18,28 +45,172 @@ ACarnivalPlayerController::ACarnivalPlayerController()
 
 bool ACarnivalPlayerController::InputKey(const FInputKeyEventArgs& Params)
 {
+	const bool bMeaningfulActivity = Params.Event == IE_Pressed || Params.Event == IE_Repeat
+		|| (Params.Event == IE_Axis && FMath::Abs(Params.AmountDepressed) > .2f);
+	if (bControllerDisconnectPaused && bMeaningfulActivity)
+	{
+		// Resume on the first deliberate input from either a reconnected controller or keyboard/mouse.
+		bControllerDisconnectPaused = false;
+		SetPause(false);
+	}
+
 	// Stick drift should not replace keyboard prompts.
 	if (Params.Event != IE_Released && FMath::Abs(Params.AmountDepressed) > .2)
 		bUsingGamepad = Params.IsGamepad();
+	if (Params.IsGamepad() && Params.Event != IE_Released && FMath::Abs(Params.AmountDepressed) > .2f && Params.InputDevice.IsValid())
+		LastActiveGamepadDeviceId = Params.InputDevice;
+
+	if (bSettingsMenuOpen)
+	{
+		HandleSettingsMenuInput(Params);
+		return true;
+	}
+
+	if (Params.Event == IE_Pressed && (Params.Key == EKeys::Escape || Params.Key == EKeys::Gamepad_Special_Right))
+	{
+		ToggleSettingsMenu();
+		return true;
+	}
+
 	return Super::InputKey(Params);
 }
 
 void ACarnivalPlayerController::OnUnPossess()
+{
+	ClearCurrentPawnInputs();
+	Super::OnUnPossess();
+}
+
+void ACarnivalPlayerController::ClearCurrentPawnInputs(bool bLeaveRideOperator)
 {
 	if (auto* Bike = Cast<ACarnivalMotorcycle>(GetPawn()))
 	{
 		Bike->InputThrottle(0.f);
 		Bike->InputSteering(0.f);
 		Bike->InputBrake(0.f);
+		Bike->InputBrakeReverse(0.f);
+		Bike->InputHandbrake(false);
+		Bike->InputRiderBalance(0.f);
 	}
 	if (auto* CarnivalCharacter = Cast<ACarnivalPlayerCharacter>(GetPawn()))
-		CarnivalCharacter->LeaveRideOperator();
-	Super::OnUnPossess();
+	{
+		CarnivalCharacter->StopSprinting();
+		CarnivalCharacter->StopJumping();
+		CarnivalCharacter->ConsumeMovementInputVector();
+		if (bLeaveRideOperator) CarnivalCharacter->LeaveRideOperator();
+	}
+	bSprintToggleActive = false;
+	FlushPressedKeys();
+}
+
+void ACarnivalPlayerController::LoadPlayerInputSettings()
+{
+	if (!GConfig) return;
+	GConfig->GetFloat(CarnivalInputSettingsSection, TEXT("StickLookDegreesPerSecond"), StickLookDegreesPerSecond, GGameUserSettingsIni);
+	GConfig->GetFloat(CarnivalInputSettingsSection, TEXT("StickDeadZone"), StickDeadZone, GGameUserSettingsIni);
+	GConfig->GetBool(CarnivalInputSettingsSection, TEXT("InvertLookY"), bInvertLookY, GGameUserSettingsIni);
+	GConfig->GetBool(CarnivalInputSettingsSection, TEXT("SprintToggleMode"), bSprintToggleMode, GGameUserSettingsIni);
+	StickLookDegreesPerSecond = FMath::Clamp(StickLookDegreesPerSecond, 60.f, 240.f);
+	StickDeadZone = FMath::Clamp(StickDeadZone, .05f, .3f);
+}
+
+void ACarnivalPlayerController::SavePlayerInputSettings() const
+{
+	if (!GConfig) return;
+	GConfig->SetFloat(CarnivalInputSettingsSection, TEXT("StickLookDegreesPerSecond"), StickLookDegreesPerSecond, GGameUserSettingsIni);
+	GConfig->SetFloat(CarnivalInputSettingsSection, TEXT("StickDeadZone"), StickDeadZone, GGameUserSettingsIni);
+	GConfig->SetBool(CarnivalInputSettingsSection, TEXT("InvertLookY"), bInvertLookY, GGameUserSettingsIni);
+	GConfig->SetBool(CarnivalInputSettingsSection, TEXT("SprintToggleMode"), bSprintToggleMode, GGameUserSettingsIni);
+	GConfig->Flush(false, GGameUserSettingsIni);
+}
+
+void ACarnivalPlayerController::HandleSettingsMenuInput(const FInputKeyEventArgs& Params)
+{
+	if (Params.Event != IE_Pressed && Params.Event != IE_Repeat) return;
+	const FKey Key = Params.Key;
+	if (Key == EKeys::Escape || Key == EKeys::M || Key == EKeys::Tab
+		|| Key == EKeys::Gamepad_Special_Right || Key == EKeys::Gamepad_FaceButton_Right)
+	{
+		ToggleSettingsMenu();
+		return;
+	}
+	if (Key == EKeys::Gamepad_DPad_Up || Key == EKeys::Up || Key == EKeys::W)
+	{
+		SettingsMenuSelection = (SettingsMenuSelection + CarnivalInputSettingsRows - 1) % CarnivalInputSettingsRows;
+	}
+	else if (Key == EKeys::Gamepad_DPad_Down || Key == EKeys::Down || Key == EKeys::S)
+	{
+		SettingsMenuSelection = (SettingsMenuSelection + 1) % CarnivalInputSettingsRows;
+	}
+	else if (Key == EKeys::Gamepad_DPad_Left || Key == EKeys::Left || Key == EKeys::A)
+	{
+		AdjustSelectedSetting(-1);
+	}
+	else if (Key == EKeys::Gamepad_DPad_Right || Key == EKeys::Right || Key == EKeys::D)
+	{
+		AdjustSelectedSetting(1);
+	}
+	else if (Key == EKeys::Gamepad_FaceButton_Bottom || Key == EKeys::Enter || Key == EKeys::SpaceBar)
+	{
+		ActivateSelectedSetting();
+	}
+}
+
+void ACarnivalPlayerController::AdjustSelectedSetting(int32 Direction)
+{
+	if (Direction == 0) return;
+	switch (SettingsMenuSelection)
+	{
+	case 0:
+		StickLookDegreesPerSecond = FMath::Clamp(StickLookDegreesPerSecond + Direction * 20.f, 60.f, 240.f);
+		break;
+	case 1:
+		StickDeadZone = FMath::Clamp(StickDeadZone + Direction * .025f, .05f, .3f);
+		break;
+	default:
+		return;
+	}
+	SavePlayerInputSettings();
+}
+
+void ACarnivalPlayerController::ActivateSelectedSetting()
+{
+	switch (SettingsMenuSelection)
+	{
+	case 2:
+		bInvertLookY = !bInvertLookY;
+		break;
+	case 3:
+		bSprintToggleMode = !bSprintToggleMode;
+		bSprintToggleActive = false;
+		if (ACarnivalPlayerCharacter* Char = Cast<ACarnivalPlayerCharacter>(GetPawn())) Char->StopSprinting();
+		break;
+	case 4:
+		ResetPlayerInputSettings();
+		return;
+	default:
+		return;
+	}
+	SavePlayerInputSettings();
+}
+
+void ACarnivalPlayerController::ResetPlayerInputSettings()
+{
+	StickLookDegreesPerSecond = 120.f;
+	StickDeadZone = .12f;
+	bInvertLookY = false;
+	bSprintToggleMode = false;
+	bSprintToggleActive = false;
+	if (ACarnivalPlayerCharacter* Char = Cast<ACarnivalPlayerCharacter>(GetPawn())) Char->StopSprinting();
+	SavePlayerInputSettings();
 }
 
 void ACarnivalPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
+	LoadPlayerInputSettings();
+	if (UGameInstance* GameInstance = GetGameInstance())
+		GameInstance->OnInputDeviceConnectionChange.AddDynamic(this, &ACarnivalPlayerController::HandleInputDeviceConnectionChange);
 
 	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
 	{
@@ -47,6 +218,33 @@ void ACarnivalPlayerController::BeginPlay()
 		{
 			Subsystem->AddMappingContext(DefaultMappingContext, 0);
 		}
+	}
+}
+
+void ACarnivalPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UGameInstance* GameInstance = GetGameInstance())
+		GameInstance->OnInputDeviceConnectionChange.RemoveDynamic(this, &ACarnivalPlayerController::HandleInputDeviceConnectionChange);
+	Super::EndPlay(EndPlayReason);
+}
+
+void ACarnivalPlayerController::HandleInputDeviceConnectionChange(EInputDeviceConnectionState NewConnectionState, FPlatformUserId PlatformUserId, FInputDeviceId InputDeviceId)
+{
+	if (NewConnectionState != EInputDeviceConnectionState::Disconnected
+		|| !bUsingGamepad
+		|| !LastActiveGamepadDeviceId.IsValid()
+		|| InputDeviceId != LastActiveGamepadDeviceId)
+	{
+		return;
+	}
+
+	LastActiveGamepadDeviceId = INPUTDEVICEID_NONE;
+	bUsingGamepad = false;
+	ClearCurrentPawnInputs();
+	bControllerDisconnectPaused = SetPause(true);
+	if (!bControllerDisconnectPaused)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Controller disconnected, but the active game mode refused to pause."));
 	}
 }
 
@@ -124,6 +322,8 @@ void ACarnivalPlayerController::SetupInputComponent()
 		{
 			EnhancedInputComponent->BindAction(InteractMountAction, ETriggerEvent::Started, this, &ACarnivalPlayerController::OnInteractMount);
 		}
+		// These legacy combat/build bindings are for in-editor project testing only.
+#if WITH_EDITOR
 		if (AttackAction)
 		{
 			EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Started, this, &ACarnivalPlayerController::OnAttack);
@@ -170,6 +370,7 @@ void ACarnivalPlayerController::SetupInputComponent()
 		{
 			EnhancedInputComponent->BindAction(WeaponSlot0Action, ETriggerEvent::Started, this, &ACarnivalPlayerController::OnWeaponSlot0);
 		}
+#endif
 
 		// Settings Menu
 		if (SettingsMenuAction)
@@ -177,7 +378,8 @@ void ACarnivalPlayerController::SetupInputComponent()
 			EnhancedInputComponent->BindAction(SettingsMenuAction, ETriggerEvent::Started, this, &ACarnivalPlayerController::ToggleSettingsMenu);
 		}
 
-		// Fast Travel Hotkeys (F1-F7)
+		// Fast-travel hotkeys are editor-only; packaged travel follows the authored routes.
+#if WITH_EDITOR
 		if (TravelCarnivalAction)
 		{
 			EnhancedInputComponent->BindAction(TravelCarnivalAction, ETriggerEvent::Started, this, &ACarnivalPlayerController::OnTravelCarnival);
@@ -206,6 +408,7 @@ void ACarnivalPlayerController::SetupInputComponent()
 		{
 			EnhancedInputComponent->BindAction(TravelMarsAction, ETriggerEvent::Started, this, &ACarnivalPlayerController::OnTravelMars);
 		}
+#endif
 
 		// Motorcycle driving
 		if (ThrottleAction)
@@ -226,12 +429,30 @@ void ACarnivalPlayerController::SetupInputComponent()
 			EnhancedInputComponent->BindAction(BrakeAction, ETriggerEvent::Completed, this, &ACarnivalPlayerController::OnBrake);
 			EnhancedInputComponent->BindAction(BrakeAction, ETriggerEvent::Canceled, this, &ACarnivalPlayerController::OnBrake);
 		}
+		if (BrakeReverseAction)
+		{
+			EnhancedInputComponent->BindAction(BrakeReverseAction, ETriggerEvent::Triggered, this, &ACarnivalPlayerController::OnBrakeReverse);
+			EnhancedInputComponent->BindAction(BrakeReverseAction, ETriggerEvent::Completed, this, &ACarnivalPlayerController::OnBrakeReverse);
+			EnhancedInputComponent->BindAction(BrakeReverseAction, ETriggerEvent::Canceled, this, &ACarnivalPlayerController::OnBrakeReverse);
+		}
+		if (HandbrakeAction)
+		{
+			EnhancedInputComponent->BindAction(HandbrakeAction, ETriggerEvent::Triggered, this, &ACarnivalPlayerController::OnHandbrake);
+			EnhancedInputComponent->BindAction(HandbrakeAction, ETriggerEvent::Completed, this, &ACarnivalPlayerController::OnHandbrake);
+			EnhancedInputComponent->BindAction(HandbrakeAction, ETriggerEvent::Canceled, this, &ACarnivalPlayerController::OnHandbrake);
+		}
+		if (RiderBalanceAction)
+		{
+			EnhancedInputComponent->BindAction(RiderBalanceAction, ETriggerEvent::Triggered, this, &ACarnivalPlayerController::OnRiderBalance);
+			EnhancedInputComponent->BindAction(RiderBalanceAction, ETriggerEvent::Completed, this, &ACarnivalPlayerController::OnRiderBalance);
+			EnhancedInputComponent->BindAction(RiderBalanceAction, ETriggerEvent::Canceled, this, &ACarnivalPlayerController::OnRiderBalance);
+		}
 	}
 }
 
 void ACarnivalPlayerController::OnMove(const FInputActionValue& Value)
 {
-	FVector2D MovementVector = Value.Get<FVector2D>().GetClampedToMaxSize(1.f);
+	FVector2D MovementVector = ApplyRadialDeadZone(Value.Get<FVector2D>(), StickDeadZone);
 	if (ACarnivalPlayerCharacter* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()))
 	{
 		Char->MoveForward(MovementVector.Y);
@@ -243,7 +464,7 @@ void ACarnivalPlayerController::OnLook(const FInputActionValue& Value)
 {
 	FVector2D LookVector = Value.Get<FVector2D>();
 	AddYawInput(LookVector.X);
-	AddPitchInput(LookVector.Y);
+	AddPitchInput(bInvertLookY ? -LookVector.Y : LookVector.Y);
 }
 
 void ACarnivalPlayerController::OnJumpVault()
@@ -264,14 +485,24 @@ void ACarnivalPlayerController::OnStartSprint()
 	if (ACarnivalPlayerCharacter* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()))
 	{
 		if (IsValid(Char->OperatingRide)) { Char->OperatingRide->OperatorStart(Char); return; }
-		Char->StartSprinting();
+		if (bSprintToggleMode)
+		{
+			bSprintToggleActive = !bSprintToggleActive;
+			if (bSprintToggleActive) Char->StartSprinting();
+			else Char->StopSprinting();
+		}
+		else
+		{
+			Char->StartSprinting();
+		}
 	}
 }
 
 void ACarnivalPlayerController::OnLookStick(const FInputActionValue& Value)
 {
 	if (IsLookInputIgnored()) return;
-	const FVector2D Stick = Value.Get<FVector2D>().GetClampedToMaxSize(1.f);
+	FVector2D Stick = ApplyRadialDeadZone(Value.Get<FVector2D>(), StickDeadZone);
+	if (bInvertLookY) Stick.Y *= -1.f;
 	const float Scale = StickLookDegreesPerSecond * GetWorld()->GetDeltaSeconds();
 	RotationInput.Yaw += Stick.X * Scale;
 	RotationInput.Pitch += Stick.Y * Scale;
@@ -279,19 +510,26 @@ void ACarnivalPlayerController::OnLookStick(const FInputActionValue& Value)
 
 void ACarnivalPlayerController::OnContextInteract()
 {
-	if (auto* Char = Cast<ACarnivalPlayerCharacter>(GetPawn())) Char->InteractWithRideOperator();
+	if (auto* Char = Cast<ACarnivalPlayerCharacter>(GetPawn())) Char->TryContextInteract();
 }
 
 void ACarnivalPlayerController::OnCancel()
 {
-	if (auto* Char = Cast<ACarnivalPlayerCharacter>(GetPawn())) Char->LeaveRideOperator();
+	if (auto* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()))
+	{
+		Char->LeaveRideOperator();
+		Char->TryRecoverToSafePosition();
+	}
 }
 
 void ACarnivalPlayerController::OnStopSprint()
 {
-	if (ACarnivalPlayerCharacter* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()))
+	if (!bSprintToggleMode)
 	{
-		Char->StopSprinting();
+		if (ACarnivalPlayerCharacter* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()))
+		{
+			Char->StopSprinting();
+		}
 	}
 }
 
@@ -499,7 +737,7 @@ void ACarnivalPlayerController::OnSteer(const FInputActionValue& Value)
 {
 	if (ACarnivalMotorcycle* Bike = Cast<ACarnivalMotorcycle>(GetPawn()))
 	{
-		Bike->InputSteering(Value.Get<float>());
+		Bike->InputSteering(ApplyAxisDeadZone(Value.Get<float>(), StickDeadZone));
 	}
 }
 
@@ -511,29 +749,36 @@ void ACarnivalPlayerController::OnBrake(const FInputActionValue& Value)
 	}
 }
 
+void ACarnivalPlayerController::OnHandbrake(const FInputActionValue& Value)
+{
+	if (auto* Bike = Cast<ACarnivalMotorcycle>(GetPawn()))
+		Bike->InputHandbrake(Value.Get<bool>());
+}
+
+void ACarnivalPlayerController::OnBrakeReverse(const FInputActionValue& Value)
+{
+	if (auto* Bike = Cast<ACarnivalMotorcycle>(GetPawn()))
+		Bike->InputBrakeReverse(Value.Get<float>());
+}
+
+void ACarnivalPlayerController::OnRiderBalance(const FInputActionValue& Value)
+{
+	if (auto* Bike = Cast<ACarnivalMotorcycle>(GetPawn()))
+		Bike->InputRiderBalance(ApplyAxisDeadZone(Value.Get<float>(), StickDeadZone));
+}
+
 void ACarnivalPlayerController::ToggleSettingsMenu()
 {
-	if (SettingsMenuWidget && SettingsMenuWidget->IsInViewport())
+	bSettingsMenuOpen = !bSettingsMenuOpen;
+	if (bSettingsMenuOpen)
 	{
-		SettingsMenuWidget->RemoveFromParent();
-		SetShowMouseCursor(false);
-		SetInputMode(FInputModeGameOnly());
+		ClearCurrentPawnInputs(false);
+		SettingsMenuSelection = FMath::Clamp(SettingsMenuSelection, 0, CarnivalInputSettingsRows - 1);
 	}
-	else if (SettingsMenuWidgetClass)
-	{
-		if (!SettingsMenuWidget)
-		{
-			SettingsMenuWidget = CreateWidget<UUserWidget>(this, SettingsMenuWidgetClass);
-		}
-		if (SettingsMenuWidget)
-		{
-			SettingsMenuWidget->AddToViewport(100);
-			SetShowMouseCursor(true);
-			FInputModeGameAndUI InputMode;
-			InputMode.SetWidgetToFocus(SettingsMenuWidget->TakeWidget());
-			SetInputMode(InputMode);
-		}
-	}
+	if (ACarnivalHUD* HUD = Cast<ACarnivalHUD>(GetHUD())) HUD->bShowSettingsMenu = bSettingsMenuOpen;
+	SetShowMouseCursor(false);
+	SetInputMode(FInputModeGameOnly());
+	SetPause(bSettingsMenuOpen);
 }
 
 void ACarnivalPlayerController::SetMotorcyclePhysicsMode(EMotorcyclePhysicsMode NewMode)

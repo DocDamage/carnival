@@ -16,6 +16,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "MetaHumanCharacter",
+			"Enabled": true
+		},
+		{
 			"Name": "MetaHumanCrowd",
 			"Enabled": true
 		},

@@ -1,0 +1,371 @@
+{
+  "coordinate_unit": "Unreal centimeters",
+  "world_map": "/Game/Creepwood_Carnival_Meshingun/Environment/Map/LV_Carnival",
+  "facing_convention": "Approximate world yaw along the A-to-B route direction; reverse travel is supported by design but still needs PIE verification.",
+  "clearance_convention": "Widths and head clearances are authored geometry values. A null head clearance means no measured overhead limit is recorded.",
+  "connections": [
+    {
+      "id": "R01",
+      "from": "Carnival",
+      "to": "Coastal Train Bridge",
+      "type": "standard",
+      "status": "Existing route retained; combined Carnival-to-Mansion traversal has prior successful evidence. This endpoint split was not separately rerun.",
+      "estimated_length_m": 224.51,
+      "endpoint_clear_width_cm": 460,
+      "endpoint_clear_height_cm": null,
+      "source": "Saved/MansionConnection/Route_Layout.json, Carnival_Wetlands section and Railroad_Crossing west threshold",
+      "endpoints": {
+        "a": {
+          "region": "Carnival",
+          "package": "/Game/Creepwood_Carnival_Meshingun/Environment/Map/LV_Carnival",
+          "world_cm": [-5727.482, -6311.805, 102.0],
+          "facing_world_yaw_deg": 235.0,
+          "floor_elevation_cm": 102.0,
+          "clear_width_cm": 460
+        },
+        "b": {
+          "region": "Coastal Train Bridge",
+          "package": "/Game/Carnival/World/Levels/L_CoastalMansionApproach",
+          "world_cm": [-16516.126, -24551.989, 170.0],
+          "facing_world_yaw_deg": 235.0,
+          "floor_elevation_cm": 170.0,
+          "clear_width_cm": 460
+        }
+      }
+    },
+    {
+      "id": "R02",
+      "from": "Coastal Train Bridge",
+      "to": "Mansion",
+      "type": "standard",
+      "status": "Existing route retained; combined Carnival-to-Mansion traversal has prior successful evidence. This endpoint split was not separately rerun.",
+      "estimated_length_m": 226.57,
+      "bridge_internal_section_length_m": 577.40,
+      "endpoint_clear_width_cm": 460,
+      "endpoint_clear_height_cm": null,
+      "source": "Saved/MansionConnection/Route_Layout.json, Railroad_Crossing east threshold through Mansion_Wetlands and driveway",
+      "endpoints": {
+        "a": {
+          "region": "Coastal Train Bridge",
+          "package": "/Game/Carnival/World/Levels/L_CoastalMansionApproach",
+          "world_cm": [-53961.632, -68284.813, 170.0],
+          "facing_world_yaw_deg": 235.0,
+          "floor_elevation_cm": 170.0,
+          "clear_width_cm": 460
+        },
+        "b": {
+          "region": "Mansion",
+          "package": "/Game/Carnival/World/Levels/L_HauntedMansionConnected",
+          "world_cm": [-69105.978, -84621.550, 598.0],
+          "facing_world_yaw_deg": 235.0,
+          "floor_elevation_cm": 598.0,
+          "clear_width_cm": 460
+        }
+      }
+    },
+    {
+      "id": "R03",
+      "from": "Mansion",
+      "to": "Docks North",
+      "type": "standard surface",
+      "status": "Authored in the shared OuterRoute spine; gameplay traversal not verified.",
+      "estimated_length_m": 551.98,
+      "spine_control_range_inclusive": [0, 3],
+      "floor_width_cm": 760,
+      "floor_thickness_cm": 45,
+      "source": "Saved/WorldExpansion/Route_Alignment_Repair.json and Saved/MansionConnection/Route_Layout.json",
+      "endpoints": {
+        "a": {
+          "region": "Mansion",
+          "package": "/Game/Carnival/World/Levels/L_HauntedMansionConnected",
+          "world_cm": [-69105.978, -84621.550, 598.0],
+          "facing_world_yaw_deg": 64.5,
+          "floor_elevation_cm": 598.0,
+          "clear_width_cm": 760
+        },
+        "b": {
+          "region": "Docks North",
+          "package": "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_DocksNorth_Layout",
+          "world_cm": [-55000.0, -55000.0, 600.0],
+          "facing_world_yaw_deg": 60.9,
+          "floor_elevation_cm": 600.0,
+          "clear_width_cm": 760
+        }
+      }
+    },
+    {
+      "id": "R04",
+      "from": "Docks North",
+      "to": "Prison",
+      "type": "standard surface",
+      "status": "Authored in the shared OuterRoute spine; gameplay traversal not verified.",
+      "estimated_length_m": 736.67,
+      "spine_control_range_inclusive": [3, 7],
+      "floor_width_cm": 760,
+      "floor_thickness_cm": 45,
+      "source": "Saved/WorldExpansion/Route_Alignment_Repair.json",
+      "endpoints": {
+        "a": {
+          "region": "Docks North",
+          "package": "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_DocksNorth_Layout",
+          "world_cm": [-55000.0, -55000.0, 600.0],
+          "facing_world_yaw_deg": 60.9,
+          "floor_elevation_cm": 600.0,
+          "clear_width_cm": 760
+        },
+        "b": {
+          "region": "Prison",
+          "package": "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_Prison",
+          "world_cm": [-30000.0, -25000.0, 600.0],
+          "facing_world_yaw_deg": 31.0,
+          "floor_elevation_cm": 600.0,
+          "clear_width_cm": 760
+        }
+      }
+    },
+    {
+      "id": "R05",
+      "from": "Prison",
+      "to": "Docks East",
+      "type": "standard surface",
+      "status": "Authored in the shared OuterRoute spine; gameplay traversal not verified.",
+      "estimated_length_m": 1342.37,
+      "spine_control_range_inclusive": [7, 14],
+      "floor_width_cm": 760,
+      "floor_thickness_cm": 45,
+      "source": "Saved/WorldExpansion/Route_Alignment_Repair.json",
+      "endpoints": {
+        "a": {
+          "region": "Prison",
+          "package": "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_Prison",
+          "world_cm": [-30000.0, -25000.0, 600.0],
+          "facing_world_yaw_deg": 31.0,
+          "floor_elevation_cm": 600.0,
+          "clear_width_cm": 760
+        },
+        "b": {
+          "region": "Docks East",
+          "package": "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_DocksEast",
+          "world_cm": [70000.0, 15000.0, 600.0],
+          "facing_world_yaw_deg": 19.3,
+          "floor_elevation_cm": 600.0,
+          "clear_width_cm": 760
+        }
+      }
+    },
+    {
+      "id": "R06",
+      "from": "Docks East",
+      "to": "Hospital",
+      "type": "standard surface",
+      "status": "Authored in the shared OuterRoute spine; gameplay traversal not verified.",
+      "estimated_length_m": 359.18,
+      "spine_control_range_inclusive": [14, 16],
+      "floor_width_cm": 760,
+      "floor_thickness_cm": 45,
+      "source": "Saved/WorldExpansion/Route_Alignment_Repair.json and Saved/WorldExpansion/World_Connection.json",
+      "endpoints": {
+        "a": {
+          "region": "Docks East",
+          "package": "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_DocksEast",
+          "world_cm": [70000.0, 15000.0, 600.0],
+          "facing_world_yaw_deg": 66.8,
+          "floor_elevation_cm": 600.0,
+          "clear_width_cm": 760
+        },
+        "b": {
+          "region": "Hospital",
+          "package": "/Game/Carnival/World/Levels/L_IndustrialHospitalExterior",
+          "world_cm": [95849.499, 129003.284, 642.781],
+          "facing_world_yaw_deg": 81.0,
+          "floor_elevation_cm": 642.781,
+          "clear_width_cm": 760
+        }
+      }
+    },
+    {
+      "id": "R07",
+      "from": "Hospital",
+      "to": "Slums",
+      "type": "standard surface",
+      "status": "Existing connected hospital/slums road retained; the new endpoint split and gameplay traversal are not verified.",
+      "estimated_length_m": 793.44,
+      "route_station_from_carnival_cm": [151000, 76000],
+      "floor_width_cm": 900,
+      "floor_thickness_cm": null,
+      "source": "Scripts/industrial_hospital_route_config.py and Saved/IndustrialHospital/Industrial_Hospital_Route_Layout.json; sampled route split at the Slums north street interface",
+      "endpoints": {
+        "a": {
+          "region": "Hospital",
+          "package": "/Game/Carnival/World/Levels/L_IndustrialHospitalExterior",
+          "world_cm": [95849.499, 129003.284, 642.781],
+          "facing_world_yaw_deg": 234.0,
+          "floor_elevation_cm": 642.781,
+          "clear_width_cm": 900
+        },
+        "b": {
+          "region": "Slums",
+          "package": "/Game/Carnival/World/Levels/L_IndustrialSlums_DistrictFinal",
+          "world_cm": [46911.503, 71853.721, 72.781],
+          "facing_world_yaw_deg": 234.0,
+          "floor_elevation_cm": 72.781,
+          "clear_width_cm": 900
+        }
+      }
+    },
+    {
+      "id": "R08",
+      "from": "Slums",
+      "to": "Carnival",
+      "type": "standard surface",
+      "status": "Existing connected road retained; the new endpoint split and gameplay traversal are not verified.",
+      "estimated_length_m": 610.52,
+      "route_station_from_carnival_cm": [60000, 0],
+      "floor_width_cm": 900,
+      "floor_thickness_cm": null,
+      "source": "Scripts/industrial_hospital_route_config.py and Saved/IndustrialHospital/Industrial_Hospital_Route_Layout.json; sampled route split at the Slums south street interface",
+      "endpoints": {
+        "a": {
+          "region": "Slums",
+          "package": "/Game/Carnival/World/Levels/L_IndustrialSlums_DistrictFinal",
+          "world_cm": [42361.041, 55382.738, 305.284],
+          "facing_world_yaw_deg": 234.0,
+          "floor_elevation_cm": 305.284,
+          "clear_width_cm": 900
+        },
+        "b": {
+          "region": "Carnival",
+          "package": "/Game/Creepwood_Carnival_Meshingun/Environment/Map/LV_Carnival",
+          "world_cm": [7093.926, 6841.718, 42.781],
+          "facing_world_yaw_deg": 234.0,
+          "floor_elevation_cm": 42.781,
+          "clear_width_cm": 900
+        }
+      }
+    },
+    {
+      "id": "R09",
+      "from": "Prison",
+      "to": "Research Lab",
+      "type": "standard surface branch",
+      "status": "Authored; gameplay traversal not verified.",
+      "estimated_length_m": 205.14,
+      "floor_width_cm": 500,
+      "floor_thickness_cm": 40,
+      "source": "Saved/WorldExpansion/Region_Authoring.json",
+      "endpoints": {
+        "a": {
+          "region": "Prison",
+          "package": "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_Prison",
+          "world_cm": [-30000.0, -25000.0, 600.0],
+          "facing_world_yaw_deg": 135.0,
+          "floor_elevation_cm": 600.0,
+          "clear_width_cm": 500
+        },
+        "b": {
+          "region": "Research Lab",
+          "package": "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_LabA",
+          "world_cm": [-41000.0, -8000.0, 600.0],
+          "facing_world_yaw_deg": 116.6,
+          "floor_elevation_cm": 600.0,
+          "clear_width_cm": 500
+        }
+      }
+    },
+    {
+      "id": "R10",
+      "from": "Prison",
+      "to": "Sewers",
+      "type": "interior stair",
+      "status": "Authored as service walk plus reversible stair; gameplay traversal and stair collision not verified.",
+      "estimated_length_m": 132.12,
+      "service_walk_length_m": 67.12,
+      "stair_horizontal_length_m": 65.0,
+      "stair_vertical_drop_m": 24.0,
+      "stair_steps": 120,
+      "stair_clear_width_cm": 430,
+      "stair_clear_height_cm": 465,
+      "source": "Saved/WorldExpansion/Region_Authoring.json",
+      "endpoints": {
+        "a": {
+          "region": "Prison",
+          "package": "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_Prison",
+          "world_cm": [-30000.0, -25000.0, 600.0],
+          "facing_world_yaw_deg": 60.3,
+          "floor_elevation_cm": 600.0,
+          "clear_width_cm": 450
+        },
+        "b": {
+          "region": "Sewers",
+          "package": "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_Sewers",
+          "world_cm": [-27000.0, -12500.0, -1800.0],
+          "facing_world_yaw_deg": 90.0,
+          "floor_elevation_cm": -1800.0,
+          "clear_width_cm": 430
+        }
+      }
+    },
+    {
+      "id": "R11",
+      "from": "Sewers",
+      "to": "Atlantis Ruins",
+      "type": "sealed interior tunnel",
+      "status": "Authored; gameplay traversal, loading, and water sealing not verified.",
+      "estimated_length_m": 82.11,
+      "clear_width_cm": 360,
+      "clear_height_cm": 460,
+      "source": "Saved/WorldExpansion/Region_Authoring.json",
+      "endpoints": {
+        "a": {
+          "region": "Sewers",
+          "package": "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_Sewers",
+          "world_cm": [-27100.0, -9654.0, -1800.0],
+          "facing_world_yaw_deg": 350.6,
+          "floor_elevation_cm": -1800.0,
+          "clear_width_cm": 360,
+          "clear_height_cm": 460
+        },
+        "b": {
+          "region": "Atlantis Ruins",
+          "package": "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_Atlantis",
+          "world_cm": [-19000.0, -11000.0, -1800.0],
+          "facing_world_yaw_deg": 350.6,
+          "floor_elevation_cm": -1800.0,
+          "clear_width_cm": 360,
+          "clear_height_cm": 460
+        }
+      }
+    },
+    {
+      "id": "R12",
+      "from": "Atlantis Ruins",
+      "to": "Shipwreck",
+      "type": "sealed interior tunnel",
+      "status": "Authored; gameplay traversal, loading, and water sealing not verified.",
+      "estimated_length_m": 14.28,
+      "clear_width_cm": 420,
+      "clear_height_cm": 520,
+      "source": "Saved/WorldExpansion/Region_Authoring.json",
+      "endpoints": {
+        "a": {
+          "region": "Atlantis Ruins",
+          "package": "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_Atlantis",
+          "world_cm": [-7000.0, -11000.0, -1800.0],
+          "facing_world_yaw_deg": 45.0,
+          "floor_elevation_cm": -1800.0,
+          "clear_width_cm": 420,
+          "clear_height_cm": 520
+        },
+        "b": {
+          "region": "Shipwreck",
+          "package": "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_Shipwreck",
+          "world_cm": [-6000.0, -10000.0, -2000.0],
+          "facing_world_yaw_deg": 45.0,
+          "floor_elevation_cm": -2000.0,
+          "clear_width_cm": 420,
+          "clear_height_cm": 520
+        }
+      }
+    }
+  ]
+}
