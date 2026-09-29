@@ -19,6 +19,8 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Attendant")
     FText RideName;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Attendant")
+    ECarnivalRideExperience Experience = ECarnivalRideExperience::SeatedRide;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Attendant")
     FName StartFunction = TEXT("StartRide");
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Attendant")
     FName StopFunction = TEXT("StopRide");
@@ -36,6 +38,7 @@ public:
     bool AssignRide(AActor* NewRide);
 protected:
     virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     UFUNCTION()
     void HandleRideState(ECarnivalOperationState NewState);
 };

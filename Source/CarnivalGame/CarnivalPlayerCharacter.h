@@ -93,6 +93,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Locomotion|Parkour")
 	bool TryLadderClimb();
 
+	UFUNCTION(BlueprintPure, Category = "Locomotion|Parkour")
+	bool IsParkourTraversing() const { return ParkourPath.Num() > 0; }
+
+	UFUNCTION(BlueprintCallable, Category = "Locomotion|Parkour")
+	void CancelParkourTraversal();
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Locomotion|Parkour", meta = (ClampMin = "50"))
+	float ParkourTraversalSpeed = 260.f;
+
 	/* Locomotion Controls */
 	UFUNCTION(BlueprintCallable, Category = "Locomotion")
 	void SetLocomotionState(ECarnivalLocomotionState NewState);
@@ -257,4 +266,11 @@ protected:
 
 	void UpdateSafeRecoveryState(float DeltaTime);
 	bool FindSafeRecoveryLocation(FVector& OutLocation) const;
+
+	bool BeginParkourTraversal(const TArray<FVector>& Path, ECarnivalLocomotionState State, UAnimMontage* Montage);
+	void UpdateParkourTraversal(float DeltaTime);
+	TArray<FVector> ParkourPath;
+	int32 ParkourPointIndex = 0;
+	double NextUnarmedAttackTime = 0.0;
+	bool bPunchNext = true;
 };

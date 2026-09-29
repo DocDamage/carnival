@@ -120,4 +120,7 @@ protected:
 	void OnTriggerOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
 	void CheckPlayerCheckpoints();
+
+	// A target can only contribute once during a run, even if Blueprint repeats a callback.
+	TSet<TWeakObjectPtr<ACarnivalTargetActor>> ScoredTargets;
 };

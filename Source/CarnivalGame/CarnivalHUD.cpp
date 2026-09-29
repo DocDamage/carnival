@@ -9,6 +9,9 @@
 #include "CarnivalMotorcycle.h"
 #include "CarnivalBoat.h"
 #include "CarnivalHovercraft.h"
+#include "CarnivalBumperCar.h"
+#include "CarnivalBumperArenaComponent.h"
+#include "CarnivalAudioSettingsSubsystem.h"
 #include "CarnivalWeaponBase.h"
 #include "CarnivalBuildComponent.h"
 #include "CarnivalActivityBase.h"
@@ -74,9 +77,7 @@ void ACarnivalHUD::DrawHUD()
 void ACarnivalHUD::DrawPlayerRecoveryPrompt(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC)
 {
 	if (!Canvas || !Char || !PC || !Char->CanRecoverToSafePosition()) return;
-	const FString Button = PC->bUsingGamepad
-		? (PC->bPlayStationPrompts ? TEXT("Circle") : TEXT("B"))
-		: TEXT("Backspace");
+	const FString Button = PC->GetActionKeyLabel(PC->CancelAction);
 	TArray<FString> Lines;
 	Lines.Add(FString::Printf(TEXT("[%s] Return to safe ground"), *Button));
 	const float Width = FMath::Min(360.f, Canvas->ClipX - 40.f);
@@ -112,9 +113,7 @@ void ACarnivalHUD::DrawStoryInteractionPrompt(ACarnivalPlayerCharacter* Char, AC
 	if (!Char || !PC) return;
 	ACarnivalMissionInteractionActor* Target = Char->FindNearbyMissionInteraction();
 	if (!Target) return;
-	const FString Button = PC->bUsingGamepad
-		? TEXT("D-pad Right")
-		: TEXT("E");
+	const FString Button = PC->GetActionKeyLabel(PC->ContextInteractAction);
 	TArray<FString> Lines;
 	Lines.Add(FString::Printf(TEXT("[%s] %s"), *Button, *Target->GetPromptText().ToString()));
 	const float Width = FMath::Min(520.f, Canvas->ClipX - 40.f);
@@ -125,6 +124,27 @@ void ACarnivalHUD::DrawStoryInteractionPrompt(ACarnivalPlayerCharacter* Char, AC
 
 void ACarnivalHUD::DrawRideInteraction(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC)
 {
+    if (auto* Car = PC ? Cast<ACarnivalBumperCar>(PC->GetPawn()) : nullptr)
+    {
+        const auto* Operation = Car->Arena ? Car->Arena->GetOperation() : nullptr;
+        TArray<FString> Lines;
+        if (Operation && Operation->State == ECarnivalOperationState::Running)
+        {
+            Lines.Add(FString::Printf(TEXT("[%s] Drive  |  [%s] Reverse  |  [%s] Steer"),
+                *PC->GetActionKeyLabel(PC->ThrottleAction), *PC->GetActionKeyLabel(PC->BrakeReverseAction), *PC->GetActionKeyLabel(PC->SteerAction)));
+            Lines.Add(FString::Printf(TEXT("[%s] Brake  |  [%s] Request stop and exit"),
+                *PC->GetActionKeyLabel(PC->BrakeAction), *PC->GetActionKeyLabel(PC->InteractMountAction)));
+        }
+        else if (Operation && Operation->State == ECarnivalOperationState::Unloading)
+            Lines.Add(TEXT("Waiting for a clear, safe place to exit."));
+        else if (Operation && Operation->State == ECarnivalOperationState::Returning)
+            Lines.Add(TEXT("Cars are stopping. Stay seated until you can exit."));
+        else Lines.Add(TEXT("Wait for the attendant to start the cars."));
+        const float Width = FMath::Min(620.f, Canvas->ClipX - 40.f);
+        DrawBoxWithText((Canvas->ClipX - Width) * .5f, Canvas->ClipY - 120.f, Width, 95.f,
+            TEXT("BUMPER CARS"), Lines, FLinearColor(.025f,.035f,.05f,.9f), FLinearColor(1.f,.78f,.35f), FLinearColor::White);
+        return;
+    }
 	if (!Char || !PC) return;
 	if (Char->FindNearbyMissionInteraction()) return;
 	if (Char->NearbyActivity && Char->NearbyActivity->ActivityState != ECarnivalActivityState::Active) return;
@@ -137,13 +157,11 @@ void ACarnivalHUD::DrawRideInteraction(ACarnivalPlayerCharacter* Char, ACarnival
 	ACarnivalRideAttendant* Attendant = Operation ? Cast<ACarnivalRideAttendant>(Operation->Attendant) : Char->FindNearbyAttendant();
 	if (!Operation && Attendant) Operation = Attendant->Operation;
 	if (!Operation) return;
-	const bool bPad = PC->bUsingGamepad;
-	const bool bPS = PC->bPlayStationPrompts;
-	const FString Board = bPad ? (bPS ? TEXT("Triangle") : TEXT("Y")) : TEXT("F");
-	const FString Operate = bPad ? TEXT("D-pad Right") : TEXT("E");
-	const FString Start = bPad ? (bPS ? TEXT("Cross") : TEXT("A")) : TEXT("Shift");
-	const FString Stop = bPad ? (bPS ? TEXT("Square") : TEXT("X")) : TEXT("Space");
-	const FString Leave = bPad ? (bPS ? TEXT("Circle") : TEXT("B")) : TEXT("Backspace");
+	const FString Board = PC->GetActionKeyLabel(PC->InteractMountAction);
+	const FString Operate = PC->GetActionKeyLabel(PC->ContextInteractAction);
+	const FString Start = PC->GetActionKeyLabel(PC->SprintAction);
+	const FString Stop = PC->GetActionKeyLabel(PC->JumpVaultAction);
+	const FString Leave = PC->GetActionKeyLabel(PC->CancelAction);
 	TArray<FString> Lines;
 	FString Status;
 	switch (Operation->State)
@@ -171,7 +189,9 @@ void ACarnivalHUD::DrawRideInteraction(ACarnivalPlayerCharacter* Char, ACarnival
 	else
 	{
 		if (Operation->State == ECarnivalOperationState::Loading)
-			Lines.Add(FString::Printf(TEXT("[%s] Board the ride"), *Board));
+			Lines.Add(FString::Printf(TEXT("[%s] %s"), *Board,
+				Operation->Experience == ECarnivalRideExperience::Walkthrough ? TEXT("Enter attraction") :
+				Operation->Experience == ECarnivalRideExperience::Show ? TEXT("Start show") : TEXT("Board the ride")));
 		else Lines.Add(TEXT("Please wait for the next boarding call."));
 		if (Operation->bAllowPlayerOperation && !Operation->PlayerOperator)
 			Lines.Add(FString::Printf(TEXT("[%s] Ask attendant to operate the ride"), *Operate));
@@ -218,8 +238,11 @@ void ACarnivalHUD::DrawTelemetry(ACarnivalPlayerCharacter* Char, ACarnivalPlayer
 
 		float Speed = Char->GetVelocity().Size();
 		Lines.Add(FString::Printf(TEXT("Locomotion: %s [Speed: %.0f]"), *StateStr, Speed));
-		Lines.Add(TEXT("Stance: [Shift] Sprint | [C] Crouch | [Z] Prone"));
-		Lines.Add(TEXT("Parkour: [Space] Jump / Vault (<=115cm) / Mantle (<=230cm)"));
+		if (PC)
+		{
+			Lines.Add(FString::Printf(TEXT("Stance: [%s] Sprint | [%s] Crouch | [%s] Prone"), *PC->GetActionKeyLabel(PC->SprintAction), *PC->GetActionKeyLabel(PC->CrouchAction), *PC->GetActionKeyLabel(PC->ProneAction)));
+			Lines.Add(FString::Printf(TEXT("Parkour: [%s] Jump / Vault / Mantle"), *PC->GetActionKeyLabel(PC->JumpVaultAction)));
+		}
 
 		// Weapon
 		FString WeaponStr = TEXT("Unarmed (Fists / Kicks)");
@@ -234,22 +257,22 @@ void ACarnivalHUD::DrawTelemetry(ACarnivalPlayerCharacter* Char, ACarnivalPlayer
 			}
 		}
 		Lines.Add(FString::Printf(TEXT("Weapon: %s"), *WeaponStr));
-		Lines.Add(TEXT("Slots: [1] Sword | [2] Revolver | [3] Knife | [4] Unarmed"));
-		Lines.Add(TEXT("Combat: [LMB] Attack / Shoot / Combo"));
+		if (PC) Lines.Add(FString::Printf(TEXT("Combat: [%s] Attack / Shoot / Combo"), *PC->GetActionKeyLabel(PC->AttackAction)));
 	}
 
-	const bool bPad = PC && PC->bUsingGamepad;
-	const bool bPlayStation = PC && PC->bPlayStationPrompts;
-	const FString MountButton = bPad ? (bPlayStation ? TEXT("Triangle") : TEXT("Y")) : TEXT("F");
+	const FString MountButton = PC ? PC->GetActionKeyLabel(PC->InteractMountAction) : TEXT("F");
 	Lines.Add(TEXT("---"));
 	Lines.Add(FString::Printf(TEXT("Motorcycle: [%s] Mount / Dismount / Recover"), *MountButton));
-	Lines.Add(bPad
-		? TEXT("Driving: [R2/L2] Throttle/Brake | [Left Stick] Steer")
-		: TEXT("Driving: [W/S] Throttle/Reverse | [A/D] Steer | [Space] Brake"));
+	if (PC && !Char)
+	{
+		Lines.Add(FString::Printf(TEXT("Driving: [%s] Throttle | [%s] Reverse | [%s] Steer"), *PC->GetActionKeyLabel(PC->ThrottleAction), *PC->GetActionKeyLabel(PC->BrakeReverseAction), *PC->GetActionKeyLabel(PC->SteerAction)));
+		if (Cast<ACarnivalHovercraft>(PC->GetPawn()))
+			Lines.Add(FString::Printf(TEXT("[%s] Boost | [%s] Strafe"), *PC->GetActionKeyLabel(PC->HandbrakeAction), *PC->GetActionKeyLabel(PC->RiderBalanceAction)));
+	}
 	Lines.Add(FString::Printf(TEXT("Other vehicles: [%s] Mount / Dismount"), *MountButton));
-	Lines.Add(TEXT("Settings / Physics Toggle: [M] or [Tab]"));
+	Lines.Add(TEXT("Settings: [Escape] / [Options]"));
 
-	DrawBoxWithText(20.0f, 20.0f, 420.0f, 240.0f,
+	DrawBoxWithText(20.0f, 100.0f, FMath::Min(600.f, Canvas->ClipX - 40.f), 48.f + Lines.Num() * 16.f,
 		TEXT("CARNIVAL HERO CONTROLS & STATUS"),
 		Lines,
 		FLinearColor(0.02f, 0.04f, 0.08f, 0.75f),
@@ -351,17 +374,21 @@ void ACarnivalHUD::DrawSettingsMenu(ACarnivalPlayerController* PC)
 	Row(2, FString::Printf(TEXT("Vertical look: %s"), PC && PC->bInvertLookY ? TEXT("Inverted") : TEXT("Normal")));
 	Row(3, FString::Printf(TEXT("Sprint: %s"), PC && PC->bSprintToggleMode ? TEXT("Toggle") : TEXT("Hold")));
 	Row(4, TEXT("Restore input defaults"));
+	Row(5, TEXT("Remap controls"));
+    const auto* Audio = PC && PC->GetGameInstance() ? PC->GetGameInstance()->GetSubsystem<UCarnivalAudioSettingsSubsystem>() : nullptr;
+    Row(6, FString::Printf(TEXT("Master volume: %d%%"), FMath::RoundToInt((Audio ? Audio->MasterVolume : 1.f) * 100.f)));
 	Lines.Add(TEXT(""));
 	Lines.Add(TEXT("D-pad / arrows: select and adjust. ") + Confirm + TEXT(": select. ") + Back + TEXT(" / Options: close."));
 	Lines.Add(TEXT("Keyboard: arrows, Enter, Escape. Mouse look remains direct."));
 
 	float Width = FMath::Min(720.f, Canvas->ClipX - 40.f);
-	float Height = 190.0f;
+	if (PC && PC->bControlRemappingOpen) Lines = PC->GetControlRemappingLines();
+	float Height = 48.f + Lines.Num() * 16.f;
 	float X = (Canvas->ClipX - Width) * 0.5f;
 	float Y = (Canvas->ClipY - Height) * 0.5f;
 
 	DrawBoxWithText(X, Y, Width, Height,
-		TEXT("PLAYER SETTINGS"),
+		PC && PC->bControlRemappingOpen ? TEXT("REMAP CONTROLS") : TEXT("PLAYER SETTINGS"),
 		Lines,
 		FLinearColor(0.05f, 0.05f, 0.12f, 0.92f),
 		FLinearColor(0.4f, 0.9f, 1.0f, 1.0f),
@@ -379,33 +406,83 @@ void ACarnivalHUD::DrawCrosshair()
 
 void ACarnivalHUD::DrawBoxWithText(float X, float Y, float Width, float Height, const FString& Header, const TArray<FString>& Lines, const FLinearColor& BoxColor, const FLinearColor& HeaderColor, const FLinearColor& TextColor)
 {
-	// Background box
-	DrawRect(BoxColor, X, Y, Width, Height);
-
-	// Accent border on top
-	DrawRect(HeaderColor, X, Y, Width, 3.0f);
-
-	UFont* Font = GEngine->GetSmallFont();
-	if (!Font)
+	UFont* Font = GEngine ? GEngine->GetSmallFont() : nullptr;
+	if (!Canvas || !Font || Canvas->ClipX < 64.f || Canvas->ClipY < 64.f)
 	{
 		return;
 	}
-
-	float CurrentY = Y + 8.0f;
-
-	// Draw Header
-	DrawText(Header, HeaderColor, X + 12.0f, CurrentY, Font, 1.1f, false);
-	CurrentY += 22.0f;
-
-	// Draw separator line
+	const float OriginalWidth = Width;
+	const float OriginalHeight = Height;
+	const bool bCenteredX = FMath::IsNearlyEqual(X + Width * .5f, Canvas->ClipX * .5f, 2.f);
+	const bool bCenteredY = FMath::IsNearlyEqual(Y + Height * .5f, Canvas->ClipY * .5f, 2.f);
+	const bool bBottomAnchored = Y > Canvas->ClipY * .5f && !bCenteredY;
+	Width = FMath::Clamp(Width, 40.f, Canvas->ClipX - 20.f);
+	const float TextWidth = Width - 24.f;
+	// Measure the actual font, including long remapped key labels. Break a long
+	// token only when it cannot fit on its own line; never reduce the font size.
+	auto Wrap = [this, Font, TextWidth](const FString& Text, float Scale, TArray<FString>& Out)
+	{
+		TArray<FString> Paragraphs;
+		Text.ParseIntoArray(Paragraphs, TEXT("\n"), false);
+		if (Paragraphs.IsEmpty()) Paragraphs.Add(TEXT(""));
+		for (FString Remaining : Paragraphs)
+		{
+			if (Remaining.IsEmpty()) { Out.Add(TEXT("")); continue; }
+			while (!Remaining.IsEmpty())
+			{
+				int32 Fit = 0, LastSpace = INDEX_NONE;
+				for (int32 Index = 1; Index <= Remaining.Len(); ++Index)
+				{
+					float W = 0.f, H = 0.f;
+					Canvas->StrLen(Font, Remaining.Left(Index), W, H);
+					if (W * Scale > TextWidth) break;
+					Fit = Index;
+					if (FChar::IsWhitespace(Remaining[Index - 1])) LastSpace = Index;
+				}
+				if (Fit < Remaining.Len() && LastSpace > 0) Fit = LastSpace;
+				Fit = FMath::Max(1, Fit);
+				Out.Add(Remaining.Left(Fit).TrimEnd());
+				Remaining = Remaining.Mid(Fit).TrimStart();
+			}
+		}
+	};
+	TArray<FString> HeaderLines, BodyLines;
+	Wrap(Header, 1.1f, HeaderLines);
+	for (const FString& Line : Lines) Wrap(Line, .95f, BodyLines);
+	float FontWidth = 0.f, FontHeight = 0.f;
+	Canvas->StrLen(Font, TEXT("Ag"), FontWidth, FontHeight);
+	const float HeaderStep = FMath::Max(22.f, FontHeight * 1.1f + 3.f);
+	const float BodyStep = FMath::Max(16.f, FontHeight * .95f + 2.f);
+	const float MaxHeight = Canvas->ClipY - 20.f;
+	const int32 MaxHeaderLines = FMath::Max(1, FMath::FloorToInt((MaxHeight - 22.f) / HeaderStep));
+	if (HeaderLines.Num() > MaxHeaderLines) HeaderLines.SetNum(MaxHeaderLines);
+	const float FixedHeight = 22.f + HeaderLines.Num() * HeaderStep;
+	const int32 MaxBodyLines = FMath::Max(0, FMath::FloorToInt((MaxHeight - FixedHeight) / BodyStep));
+	if (BodyLines.Num() > MaxBodyLines)
+	{
+		BodyLines.SetNum(MaxBodyLines);
+		if (!BodyLines.IsEmpty()) BodyLines.Last() = TEXT("...");
+	}
+	Height = FMath::Min(MaxHeight, FMath::Max(Height, FixedHeight + BodyLines.Num() * BodyStep));
+	if (bCenteredX) X += (OriginalWidth - Width) * .5f;
+	if (bCenteredY) Y += (OriginalHeight - Height) * .5f;
+	else if (bBottomAnchored) Y += OriginalHeight - Height;
+	X = FMath::Clamp(X, 10.f, Canvas->ClipX - Width - 10.f);
+	Y = FMath::Clamp(Y, 10.f, Canvas->ClipY - Height - 10.f);
+	DrawRect(BoxColor, X, Y, Width, Height);
+	DrawRect(HeaderColor, X, Y, Width, 3.f);
+	float CurrentY = Y + 8.f;
+	for (const FString& Line : HeaderLines)
+	{
+		DrawText(Line, HeaderColor, X + 12.f, CurrentY, Font, 1.1f, false);
+		CurrentY += HeaderStep;
+	}
 	DrawRect(FLinearColor(HeaderColor.R, HeaderColor.G, HeaderColor.B, 0.3f), X + 12.0f, CurrentY, Width - 24.0f, 1.0f);
 	CurrentY += 6.0f;
-
-	// Draw content lines
-	for (const FString& Line : Lines)
+	for (const FString& Line : BodyLines)
 	{
 		DrawText(Line, TextColor, X + 12.0f, CurrentY, Font, 0.95f, false);
-		CurrentY += 16.0f;
+		CurrentY += BodyStep;
 	}
 }
 
@@ -416,7 +493,7 @@ void ACarnivalHUD::DrawActivityOverlay(ACarnivalPlayerCharacter* Char, ACarnival
 		return;
 	}
 	const bool bMissionInteractionFocused = Char->FindNearbyMissionInteraction() != nullptr;
-	const FString ContextButton = PC && PC->bUsingGamepad ? TEXT("D-pad Right") : TEXT("E");
+	const FString ContextButton = PC ? PC->GetActionKeyLabel(PC->ContextInteractAction) : TEXT("E");
 
 	if (Char->ActiveActivity)
 	{

@@ -8,6 +8,9 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "CarnivalPlayerCharacter.h"
 #include "CarnivalPlayerController.h"
+#include "CarnivalVehicleExit.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "TimerManager.h"
 
 ACarnivalBoat::ACarnivalBoat()
 {
@@ -52,6 +55,9 @@ ACarnivalBoat::ACarnivalBoat()
 void ACarnivalBoat::BeginPlay()
 {
 	Super::BeginPlay();
+	CameraBoom->bUsePawnControlRotation = true;
+	CameraBoom->bInheritPitch = true;
+	CameraBoom->bInheritYaw = true;
 
 	TargetWaterZ = WaterPlaneZ;
 
@@ -95,11 +101,11 @@ void ACarnivalBoat::UpdateWaterPhysics(float DeltaTime)
 {
 	// 1. Throttle / Acceleration
 	float TargetSpeed = 0.0f;
-	if (ThrottleInput > 0.0f)
+	if (ThrottleInput > 0.0f && BrakeInput <= 0.f)
 	{
 		TargetSpeed = MaxForwardSpeed * ThrottleInput;
 	}
-	else if (ThrottleInput < 0.0f)
+	else if (ThrottleInput < 0.0f && BrakeInput <= 0.f)
 	{
 		TargetSpeed = MaxReverseSpeed * ThrottleInput;
 	}
@@ -113,7 +119,7 @@ void ACarnivalBoat::UpdateWaterPhysics(float DeltaTime)
 	}
 
 	// 2. Rudder Steering (Yaw authority scales with speed)
-	float SpeedRatio = FMath::Clamp(FMath::Abs(CurrentSpeed) / (MaxForwardSpeed * 0.5f), 0.2f, 1.0f);
+	float SpeedRatio = FMath::Clamp(FMath::Abs(CurrentSpeed) / FMath::Max(1.f, MaxForwardSpeed * 0.5f), 0.0f, 1.0f);
 	float TurnDirection = (CurrentSpeed >= 0.0f) ? 1.0f : -1.0f;
 	float YawDelta = SteeringInput * TurnRate * SpeedRatio * TurnDirection * DeltaTime;
 
@@ -122,7 +128,7 @@ void ACarnivalBoat::UpdateWaterPhysics(float DeltaTime)
 	CurrentBank = FMath::FInterpTo(CurrentBank, TargetBank, DeltaTime, 4.0f);
 
 	// Bow rise under forward thrust
-	float TargetPitch = FMath::Clamp(CurrentSpeed / MaxForwardSpeed, 0.0f, 1.0f) * 6.0f;
+	float TargetPitch = FMath::Clamp(CurrentSpeed / FMath::Max(1.f, MaxForwardSpeed), 0.0f, 1.0f) * 6.0f;
 	CurrentPitch = FMath::FInterpTo(CurrentPitch, TargetPitch, DeltaTime, 3.0f);
 
 	// 4. Wave Bobbing Simulation
@@ -142,8 +148,34 @@ void ACarnivalBoat::UpdateWaterPhysics(float DeltaTime)
 		CurrentBank + WaveRoll
 	);
 
+	if (bUseNavigableWaterBounds)
+	{
+		// Sample the whole move, including rotation, so a long frame cannot jump
+		// a narrow shoal. The normal hull sweep still handles docks and obstacles.
+		const FVector OldLocation = GetActorLocation();
+		const FQuat OldRotation = GetActorQuat();
+		const FQuat TargetRotation = NewRotation.Quaternion();
+		const FVector Extent = CollisionBox->GetScaledBoxExtent();
+		const float CornerTravel = FVector::Distance(OldLocation, NewLocation)
+			+ OldRotation.AngularDistance(TargetRotation) * Extent.Size();
+		const int32 Steps = FMath::Max(1, FMath::CeilToInt(CornerTravel / 40.f));
+		bool bNavigable = Steps <= 128;
+		for (int32 Step = 1; bNavigable && Step <= Steps; ++Step)
+		{
+			const float Alpha = static_cast<float>(Step) / Steps;
+			bNavigable = IsWaterTransformNavigable(FMath::Lerp(OldLocation, NewLocation, Alpha),
+				FQuat::Slerp(OldRotation, TargetRotation, Alpha).Rotator());
+		}
+		if (!bNavigable)
+		{
+			CurrentSpeed = 0.f;
+			return;
+		}
+	}
+
 	FHitResult SweepHit;
 	SetActorLocationAndRotation(NewLocation, NewRotation, true, &SweepHit);
+	if (SweepHit.bBlockingHit) CurrentSpeed = 0.f;
 
 	// 6. Propeller Spin
 	if (PropellerMesh)
@@ -152,9 +184,45 @@ void ACarnivalBoat::UpdateWaterPhysics(float DeltaTime)
 	}
 }
 
+bool ACarnivalBoat::IsWaterTransformNavigable(FVector Location, FRotator Rotation) const
+{
+	if (!bUseNavigableWaterBounds) return true;
+	if (!GetWorld() || !CollisionBox || Location.ContainsNaN() || Rotation.ContainsNaN()
+		|| NavigableWaterMin.ContainsNaN() || NavigableWaterMax.ContainsNaN()
+		|| NavigableWaterMin.X >= NavigableWaterMax.X || NavigableWaterMin.Y >= NavigableWaterMax.Y)
+	{
+		return false;
+	}
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(CarnivalBoatKeel), false, this);
+	if (CurrentRider) Params.AddIgnoredActor(CurrentRider);
+	const FVector Extent = CollisionBox->GetScaledBoxExtent();
+	const FQuat Quaternion = Rotation.Quaternion();
+	const float Clearance = FMath::Max(0.f, MinimumKeelClearance);
+	// All eight projected corners must remain inside the surveyed rectangle.
+	// Ground is checked below the center and corners, including bank/pitch.
+	for (int32 Point = -1; Point < 8; ++Point)
+	{
+		const FVector Local = Point < 0 ? FVector::ZeroVector : FVector(
+			(Point & 1) ? Extent.X : -Extent.X,
+			(Point & 2) ? Extent.Y : -Extent.Y,
+			(Point & 4) ? Extent.Z : -Extent.Z);
+		const FVector Corner = Location + Quaternion.RotateVector(Local);
+		if (Corner.X < NavigableWaterMin.X || Corner.X > NavigableWaterMax.X
+			|| Corner.Y < NavigableWaterMin.Y || Corner.Y > NavigableWaterMax.Y) return false;
+		FHitResult Ground;
+		const FVector Start(Corner.X, Corner.Y, Location.Z + Extent.Size() + Clearance);
+		const FVector End(Corner.X, Corner.Y, FMath::Min(Location.Z - Extent.Z, Corner.Z) - Clearance);
+		// Project WaterBodyCollision ignores Visibility; its WorldStatic object
+		// channel would incorrectly report the water surface itself as a shoal.
+		if (GetWorld()->LineTraceSingleByChannel(Ground, Start, End, ECC_Visibility, Params)) return false;
+	}
+	return true;
+}
+
 void ACarnivalBoat::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
+	if (Cast<ACarnivalPlayerController>(GetController())) return;
 
 	PlayerInputComponent->BindAxis(TEXT("MoveForward"), this, &ACarnivalBoat::InputThrottle);
 	PlayerInputComponent->BindAxis(TEXT("MoveRight"), this, &ACarnivalBoat::InputSteering);
@@ -163,36 +231,43 @@ void ACarnivalBoat::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 
 void ACarnivalBoat::InputThrottle(float Value)
 {
-	ThrottleInput = Value;
+	ThrottleInput = FMath::Clamp(Value, -1.f, 1.f);
 }
 
 void ACarnivalBoat::InputSteering(float Value)
 {
-	SteeringInput = Value;
+	SteeringInput = FMath::Clamp(Value, -1.f, 1.f);
 }
 
 void ACarnivalBoat::InputBrake(float Value)
 {
-	BrakeInput = Value;
+	BrakeInput = FMath::Clamp(Value, 0.f, 1.f);
 }
 
 bool ACarnivalBoat::CanMount(AActor* PotentialRider) const
 {
-	if (CurrentRider != nullptr || PotentialRider == nullptr)
+	const ACarnivalPlayerCharacter* Player = Cast<ACarnivalPlayerCharacter>(PotentialRider);
+	if (CurrentRider != nullptr || !IsValid(Player) || !Player->GetController()
+		|| Player->MountedMotorcycle || Player->MountedBoat || Player->MountedHovercraft
+		|| Player->IsUsingRide() || FMath::Abs(CurrentSpeed) > 50.f)
 	{
 		return false;
 	}
 
-	return MountTrigger->IsOverlappingActor(PotentialRider);
+	return MountTrigger->IsOverlappingActor(PotentialRider)
+		&& CarnivalVehicleExit::CanReachSeat(this, Player, DriverRelativeOffset);
 }
 
 void ACarnivalBoat::Mount(ACarnivalPlayerCharacter* Rider)
 {
-	if (!Rider || CurrentRider)
+	if (!CanMount(Rider))
 	{
 		return;
 	}
 
+	BoardingTransform = Rider->GetActorTransform();
+	BoardingController = Rider->GetController();
+	ClearControlInputs();
 	CurrentRider = Rider;
 
 	// Notify player character
@@ -208,22 +283,53 @@ void ACarnivalBoat::Mount(ACarnivalPlayerCharacter* Rider)
 
 void ACarnivalBoat::Dismount()
 {
-	if (!CurrentRider)
-	{
-		return;
-	}
-
-	ACarnivalPlayerCharacter* Rider = CurrentRider;
-	CurrentRider = nullptr;
-
-	// Unpossess boat and return control to rider
-	AController* BoatController = GetController();
-	if (BoatController)
-	{
-		BoatController->Possess(Rider);
-	}
-
-	// Notify character to dismount
-	Rider->OnDismountBoat();
+	if (FMath::Abs(CurrentSpeed) <= 50.f) RestoreRider(false);
 }
 
+void ACarnivalBoat::ClearControlInputs()
+{
+	ThrottleInput = SteeringInput = BrakeInput = 0.f;
+}
+
+void ACarnivalBoat::UnPossessed()
+{
+	ClearControlInputs();
+	Super::UnPossessed();
+	if (CurrentRider && GetWorld()) GetWorld()->GetTimerManager().SetTimerForNextTick(
+		FTimerDelegate::CreateUObject(this, &ACarnivalBoat::RecoverLostPossession));
+}
+
+void ACarnivalBoat::RecoverLostPossession()
+{
+	if (!GetController() && CurrentRider) RestoreRider(true);
+}
+
+void ACarnivalBoat::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (EndPlayReason == EEndPlayReason::Destroyed) RestoreRider(true);
+	Super::EndPlay(EndPlayReason);
+}
+
+void ACarnivalBoat::RestoreRider(bool bEmergency)
+{
+	if (!IsValid(CurrentRider)) { CurrentRider = nullptr; return; }
+	FVector Exit;
+	if (!CarnivalVehicleExit::FindGroundExit(this, CurrentRider, CollisionBox->GetScaledBoxExtent(), Exit))
+	{
+		if (!bEmergency) return;
+		Exit = BoardingTransform.GetLocation();
+		FRotator Rotation = BoardingTransform.Rotator();
+		GetWorld()->FindTeleportSpot(CurrentRider, Exit, Rotation);
+	}
+	ACarnivalPlayerCharacter* Rider = CurrentRider;
+	AController* FormerController = BoardingController.Get();
+	CurrentRider = nullptr;
+	ClearControlInputs();
+	CurrentSpeed = 0.f;
+	Rider->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+	Rider->SetActorLocationAndRotation(Exit, FRotator(0, GetActorRotation().Yaw, 0), false, nullptr, ETeleportType::TeleportPhysics);
+	Rider->OnDismountBoat();
+	Rider->GetCharacterMovement()->StopMovementImmediately();
+	if (FormerController && (!FormerController->GetPawn() || FormerController->GetPawn() == this)) FormerController->Possess(Rider);
+	BoardingController.Reset();
+}

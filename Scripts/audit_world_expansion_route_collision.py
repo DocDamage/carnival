@@ -156,9 +156,29 @@ def summarize_route(world, name, points, test_capsule=True, mismatch_tolerance=5
                     result["route_surface_capsule_obstructions"].append(
                         {"segment": index, **hit})
 
+        # A single sweep touching its support floor can conceal a wall farther
+        # along the same segment. Ignore only this route's generated floor
+        # actors in a separate clearance pass; keep the ordinary support audit.
+        labels = {'R03-R06_outer_surface_spine': 'OuterRoute_Segment',
+                  'R09_surface': 'PrisonToLabRoute_Segment',
+                  'R10_surface': 'PrisonToSewerServiceWalk_Segment',
+                  'R10_stair_step_support': 'PrisonSewer_StairTread',
+                  'R11_interior_tunnel': 'SewerToAtlantisPassage_Walkway',
+                  'R12_interior_tunnel': 'AtlantisToShipwreckPassage_Walkway'}
+        supports = [actor for actor in unreal.get_editor_subsystem(unreal.EditorActorSubsystem).get_all_level_actors()
+                    if actor.get_actor_label() == labels.get(name)]
+        result['independent_clearance_obstructions'] = []
+        for index, (a, b) in enumerate(zip(route_centers, route_centers[1:])):
+            skin = unreal.Vector(0., 0., 2.)
+            hit = hit_record(unreal.SystemLibrary.capsule_trace_single(
+                world, a+skin, b+skin, 42., 96., unreal.TraceTypeQuery.ECC_VISIBILITY,
+                False, supports, unreal.DrawDebugTrace.NONE, True))
+            if hit and not (hit['normal'][2] > .7072 and hit['point_cm'][2] < max(a.z,b.z)-55.):
+                result['independent_clearance_obstructions'].append({'segment':index, **hit})
+
     result["static_trace_clear"] = not (result["floor_missing"] or result["height_mismatches"]
-                                         or result["capsule_obstructions"])
-    result["authored_surface_capsule_clear"] = not result["route_surface_capsule_obstructions"]
+                                         or result["capsule_obstructions"] or result.get('independent_clearance_obstructions'))
+    result["authored_surface_capsule_clear"] = not (result["route_surface_capsule_obstructions"] or result.get('independent_clearance_obstructions'))
     return result
 
 
@@ -179,9 +199,11 @@ try:
     outer = REGION.get("outer_route_spine", {}).get("controls_cm")
     if outer:
         # The alignment repair writes one box between each 700 cm Catmull point.
+        outer_samples = surface_segment_centers(outer, 700.0, None, 45.0)
+        outer_samples = [(outer[0][0],outer[0][1],outer[0][2]+22.5)] + outer_samples + [(outer[-1][0],outer[-1][1],outer[-1][2]+22.5)]
         report["routes"].append(summarize_route(
             world, "R03-R06_outer_surface_spine",
-            surface_segment_centers(outer, 700.0, None, 45.0)))
+            outer_samples))
 
     for connection_id in ("R09", "R10"):
         connection = CONNECTIONS[connection_id]

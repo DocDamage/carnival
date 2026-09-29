@@ -19,7 +19,21 @@ void ACarnivalRideAttendant::BeginPlay()
 {
     Super::BeginPlay();
     AssignRide(Ride);
-    HandleRideState(ECarnivalOperationState::Loading);
+    HandleRideState(IsValid(Operation) ? Operation->State : ECarnivalOperationState::Closed);
+}
+
+void ACarnivalRideAttendant::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    if (IsValid(Operation))
+    {
+        Operation->OnStateChanged.RemoveDynamic(this, &ACarnivalRideAttendant::HandleRideState);
+        if (Operation->Attendant == this)
+        {
+            Operation->ReleaseOperatorControl(Operation->PlayerOperator);
+            Operation->Attendant = nullptr;
+        }
+    }
+    Super::EndPlay(EndPlayReason);
 }
 
 bool ACarnivalRideAttendant::AssignRide(AActor* NewRide)
@@ -27,14 +41,19 @@ bool ACarnivalRideAttendant::AssignRide(AActor* NewRide)
     if (!IsValid(NewRide)) return false;
     auto* Existing = NewRide->FindComponentByClass<UCarnivalRideOperationComponent>();
     if (Existing && IsValid(Existing->Attendant) && Existing->Attendant != this) return false;
-    if (Operation)
+    if (IsValid(Operation) && Operation != Existing)
     {
         Operation->OnStateChanged.RemoveDynamic(this, &ACarnivalRideAttendant::HandleRideState);
-        if (Operation->Attendant == this) Operation->Attendant = nullptr;
+        if (Operation->Attendant == this)
+        {
+            Operation->ReleaseOperatorControl(Operation->PlayerOperator);
+            Operation->Attendant = nullptr;
+        }
     }
     Ride = NewRide;
     Operation = Existing ? Existing : NewObject<UCarnivalRideOperationComponent>(NewRide);
     Operation->Attendant = this;
+    Operation->Experience = Experience;
     Operation->StartFunction = StartFunction;
     Operation->StopFunction = StopFunction;
     Operation->CycleSeconds = CycleSeconds;
@@ -45,6 +64,7 @@ bool ACarnivalRideAttendant::AssignRide(AActor* NewRide)
         NewRide->AddInstanceComponent(Operation);
         Operation->RegisterComponent();
     }
+    HandleRideState(Operation->State);
     return true;
 }
 

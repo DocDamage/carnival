@@ -22,6 +22,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Carnival|Seat")
     FTransform PassengerOffset = FTransform::Identity;
 
+    // Basket standing positions use the rider's normal standing animation.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Carnival|Seat")
+    bool bStandingPassenger = false;
+
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Carnival|Seat|IK")
     FTransform LeftHandTarget = FTransform(FRotator::ZeroRotator, FVector(25.0, -25.0, 35.0));
 

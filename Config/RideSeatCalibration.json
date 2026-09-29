@@ -1,0 +1,626 @@
+{
+  "schema": 1,
+  "status": "measured_initial_authoring_runtime_review_pending",
+  "geometry_source": "Saved/RideDevelopment/SeatGeometry/index.json",
+  "source_assets_modified": false,
+  "meshes": {
+    "/Game/Creepwood_Carnival_Meshingun/Environment/Asset/Mesh/BalloonRide/SM_BalloonRide_seat_01a.SM_BalloonRide_seat_01a": {
+      "geometry_reviewed": true,
+      "standing_passenger": true,
+      "notes": "Standing basket floor; one passenger per basket",
+      "geometry_review_image": "Saved\\RideDevelopment\\SeatGeometry\\SM_BalloonRide_seat_01a_surfaces.png",
+      "anchors": [
+        {
+          "location": [
+            0,
+            0,
+            0.317
+          ],
+          "yaw": 0,
+          "support_triangle": 4796,
+          "support_normal": [
+            0.01029,
+            -0.01875,
+            0.99977
+          ]
+        }
+      ],
+      "visual_passenger_acceptance": "pending"
+    },
+    "/Game/Creepwood_Carnival_Meshingun/Environment/Asset/Mesh/ClownRide/SM_ClownRideseat.SM_ClownRideseat": {
+      "geometry_reviewed": true,
+      "standing_passenger": false,
+      "notes": "Three inward facing perimeter bench positions; gate at +X stays open",
+      "geometry_review_image": "Saved\\RideDevelopment\\SeatGeometry\\SM_ClownRideseat_surfaces.png",
+      "anchors": [
+        {
+          "location": [
+            -65,
+            0,
+            16.308
+          ],
+          "yaw": 0,
+          "support_triangle": 789,
+          "support_normal": [
+            -0.04435,
+            0.00451,
+            0.99901
+          ]
+        },
+        {
+          "location": [
+            0,
+            65,
+            16.202
+          ],
+          "yaw": -90,
+          "support_triangle": 2413,
+          "support_normal": [
+            -0.00406,
+            0.08731,
+            0.99617
+          ]
+        },
+        {
+          "location": [
+            0,
+            -65,
+            16.456
+          ],
+          "yaw": 90,
+          "support_triangle": 71,
+          "support_normal": [
+            0.00416,
+            -0.04804,
+            0.99884
+          ]
+        }
+      ],
+      "visual_passenger_acceptance": "pending"
+    },
+    "/Game/Creepwood_Carnival_Meshingun/Environment/Asset/Mesh/Flyingbob/SM_vehicle_01a.SM_vehicle_01a": {
+      "geometry_reviewed": true,
+      "standing_passenger": false,
+      "notes": "One centered passenger on the actual Flying Bobs seat cushion",
+      "geometry_review_image": "Saved\\RideDevelopment\\SeatGeometry\\SM_vehicle_01a_surfaces.png",
+      "anchors": [
+        {
+          "location": [
+            50,
+            -40,
+            11.775
+          ],
+          "yaw": 90,
+          "support_triangle": 1436,
+          "support_normal": [
+            -0.01412,
+            0.6423,
+            0.76632
+          ]
+        }
+      ],
+      "visual_passenger_acceptance": "pending"
+    },
+    "/Game/Creepwood_Carnival_Meshingun/Environment/Asset/Mesh/Props/SM_Hotair_Balloon.SM_Hotair_Balloon": {
+      "geometry_reviewed": true,
+      "standing_passenger": true,
+      "notes": "Four standing positions on the actual basket floor",
+      "geometry_review_image": "Saved\\RideDevelopment\\SeatGeometry\\SM_Hotair_Balloon_surfaces.png",
+      "anchors": [
+        {
+          "location": [
+            -70,
+            -70,
+            -645.996
+          ],
+          "yaw": 0,
+          "support_triangle": 1660,
+          "support_normal": [
+            0.0008,
+            0.00082,
+            1.0
+          ]
+        },
+        {
+          "location": [
+            -70,
+            70,
+            -646.111
+          ],
+          "yaw": 0,
+          "support_triangle": 1660,
+          "support_normal": [
+            0.0008,
+            0.00082,
+            1.0
+          ]
+        },
+        {
+          "location": [
+            70,
+            -70,
+            -646.083
+          ],
+          "yaw": 0,
+          "support_triangle": 1529,
+          "support_normal": [
+            -0.00109,
+            -0.00023,
+            1.0
+          ]
+        },
+        {
+          "location": [
+            70,
+            70,
+            -646.05
+          ],
+          "yaw": 0,
+          "support_triangle": 1529,
+          "support_normal": [
+            -0.00109,
+            -0.00023,
+            1.0
+          ]
+        }
+      ],
+      "visual_passenger_acceptance": "pending"
+    },
+    "/Game/Creepwood_Carnival_Meshingun/Environment/Asset/Mesh/PirateRide/SM_Mainboat_PirateRide.SM_Mainboat_PirateRide": {
+      "geometry_reviewed": true,
+      "standing_passenger": false,
+      "notes": "Twenty bench positions face the center; support is sampled per row along curved deck",
+      "geometry_review_image": "Saved\\RideDevelopment\\SeatGeometry\\SM_Mainboat_PirateRide_surfaces.png",
+      "anchors": [
+        {
+          "location": [
+            -500,
+            -70,
+            -965.82
+          ],
+          "yaw": 0,
+          "support_triangle": 6393,
+          "support_normal": [
+            0.00757,
+            -0.00261,
+            0.99997
+          ]
+        },
+        {
+          "location": [
+            -500,
+            70,
+            -965.44
+          ],
+          "yaw": 0,
+          "support_triangle": 6398,
+          "support_normal": [
+            0.00536,
+            -0.00318,
+            0.99998
+          ]
+        },
+        {
+          "location": [
+            -400,
+            -70,
+            -984.037
+          ],
+          "yaw": 0,
+          "support_triangle": 6350,
+          "support_normal": [
+            0.0166,
+            0.00104,
+            0.99986
+          ]
+        },
+        {
+          "location": [
+            -400,
+            70,
+            -984.222
+          ],
+          "yaw": 0,
+          "support_triangle": 6373,
+          "support_normal": [
+            0.02471,
+            0.00218,
+            0.99969
+          ]
+        },
+        {
+          "location": [
+            -300,
+            -70,
+            -997.586
+          ],
+          "yaw": 0,
+          "support_triangle": 6344,
+          "support_normal": [
+            0.02035,
+            0.00221,
+            0.99979
+          ]
+        },
+        {
+          "location": [
+            -300,
+            70,
+            -997.916
+          ],
+          "yaw": 0,
+          "support_triangle": 6339,
+          "support_normal": [
+            0.0333,
+            0.00395,
+            0.99944
+          ]
+        },
+        {
+          "location": [
+            -200,
+            -70,
+            -1008.553
+          ],
+          "yaw": 0,
+          "support_triangle": 6365,
+          "support_normal": [
+            0.03124,
+            0.00161,
+            0.99951
+          ]
+        },
+        {
+          "location": [
+            -200,
+            70,
+            -1008.777
+          ],
+          "yaw": 0,
+          "support_triangle": 6365,
+          "support_normal": [
+            0.03124,
+            0.00161,
+            0.99951
+          ]
+        },
+        {
+          "location": [
+            -100,
+            -70,
+            -1014.552
+          ],
+          "yaw": 0,
+          "support_triangle": 6430,
+          "support_normal": [
+            -0.02173,
+            -0.00103,
+            0.99976
+          ]
+        },
+        {
+          "location": [
+            -100,
+            70,
+            -1014.409
+          ],
+          "yaw": 0,
+          "support_triangle": 6430,
+          "support_normal": [
+            -0.02173,
+            -0.00103,
+            0.99976
+          ]
+        },
+        {
+          "location": [
+            100,
+            -70,
+            -1013.908
+          ],
+          "yaw": 180,
+          "support_triangle": 6458,
+          "support_normal": [
+            -0.01759,
+            0.00279,
+            0.99984
+          ]
+        },
+        {
+          "location": [
+            100,
+            70,
+            -1014.299
+          ],
+          "yaw": 180,
+          "support_triangle": 6458,
+          "support_normal": [
+            -0.01759,
+            0.00279,
+            0.99984
+          ]
+        },
+        {
+          "location": [
+            200,
+            -70,
+            -1005.809
+          ],
+          "yaw": 180,
+          "support_triangle": 6411,
+          "support_normal": [
+            -0.01436,
+            0.00181,
+            0.9999
+          ]
+        },
+        {
+          "location": [
+            200,
+            70,
+            -1006.063
+          ],
+          "yaw": 180,
+          "support_triangle": 6411,
+          "support_normal": [
+            -0.01436,
+            0.00181,
+            0.9999
+          ]
+        },
+        {
+          "location": [
+            300,
+            -70,
+            -995.088
+          ],
+          "yaw": 180,
+          "support_triangle": 6468,
+          "support_normal": [
+            -0.02004,
+            -0.00323,
+            0.99979
+          ]
+        },
+        {
+          "location": [
+            300,
+            70,
+            -994.636
+          ],
+          "yaw": 180,
+          "support_triangle": 6468,
+          "support_normal": [
+            -0.02004,
+            -0.00323,
+            0.99979
+          ]
+        },
+        {
+          "location": [
+            400,
+            -70,
+            -982.112
+          ],
+          "yaw": 180,
+          "support_triangle": 6307,
+          "support_normal": [
+            -0.06103,
+            -0.00795,
+            0.9981
+          ]
+        },
+        {
+          "location": [
+            400,
+            70,
+            -980.998
+          ],
+          "yaw": 180,
+          "support_triangle": 6307,
+          "support_normal": [
+            -0.06103,
+            -0.00795,
+            0.9981
+          ]
+        },
+        {
+          "location": [
+            550,
+            -70,
+            -961.044
+          ],
+          "yaw": 180,
+          "support_triangle": 6314,
+          "support_normal": [
+            0.00847,
+            -0.00076,
+            0.99996
+          ]
+        },
+        {
+          "location": [
+            550,
+            70,
+            -960.937
+          ],
+          "yaw": 180,
+          "support_triangle": 6314,
+          "support_normal": [
+            0.00847,
+            -0.00076,
+            0.99996
+          ]
+        }
+      ],
+      "visual_passenger_acceptance": "pending"
+    },
+    "/Game/Creepwood_Carnival_Meshingun/Environment/Asset/Mesh/Teapot/SM_Teapot_Ride_Cup.SM_Teapot_Ride_Cup": {
+      "geometry_reviewed": true,
+      "standing_passenger": false,
+      "notes": "Two opposed inward-facing bench positions clear of wheel and doorway",
+      "geometry_review_image": "Saved\\RideDevelopment\\SeatGeometry\\SM_Teapot_Ride_Cup_surfaces.png",
+      "anchors": [
+        {
+          "location": [
+            65,
+            0,
+            70.449
+          ],
+          "yaw": 180,
+          "support_triangle": 220,
+          "support_normal": [
+            -0.47544,
+            -0.03473,
+            0.87906
+          ]
+        },
+        {
+          "location": [
+            -65,
+            0,
+            70.055
+          ],
+          "yaw": 0,
+          "support_triangle": 63,
+          "support_normal": [
+            0.16381,
+            -0.01641,
+            0.98635
+          ]
+        }
+      ],
+      "visual_passenger_acceptance": "pending"
+    },
+    "/Game/Creepwood_Carnival_Meshingun/Environment/Asset/Mesh/FerrisWheel/SM_Cabin_01a.SM_Cabin_01a": {
+      "geometry_reviewed": true,
+      "standing_passenger": false,
+      "notes": "Four inward-facing bench positions below the cabin roof",
+      "geometry_review_image": "Saved\\RideDevelopment\\SeatGeometry\\SM_Cabin_01a_surfaces.png",
+      "anchors": [
+        {
+          "location": [
+            -100,
+            -55,
+            -254.158
+          ],
+          "yaw": 0,
+          "support_triangle": 423,
+          "support_normal": [
+            0.00706,
+            0.00925,
+            0.99993
+          ]
+        },
+        {
+          "location": [
+            -100,
+            55,
+            -254.051
+          ],
+          "yaw": 0,
+          "support_triangle": 246,
+          "support_normal": [
+            0.01172,
+            -0.01299,
+            0.99985
+          ]
+        },
+        {
+          "location": [
+            100,
+            -55,
+            -254.49
+          ],
+          "yaw": 180,
+          "support_triangle": 1300,
+          "support_normal": [
+            0.03037,
+            -0.00171,
+            0.99954
+          ]
+        },
+        {
+          "location": [
+            100,
+            55,
+            -254.346
+          ],
+          "yaw": 180,
+          "support_triangle": 864,
+          "support_normal": [
+            0.00277,
+            -0.00916,
+            0.99995
+          ]
+        }
+      ],
+      "visual_passenger_acceptance": "pending"
+    },
+    "/Game/Creepwood_Carnival_Meshingun/Environment/Asset/Mesh/Props/SM_CarousalBench_01a.SM_CarousalBench_01a": {
+      "geometry_reviewed": true,
+      "standing_passenger": false,
+      "notes": "Four back-to-back bench passengers; horses require a separate straddle animation",
+      "geometry_review_image": "Saved\\RideDevelopment\\SeatGeometry\\SM_CarousalBench_01a_surfaces.png",
+      "anchors": [
+        {
+          "location": [
+            -60,
+            -30,
+            69.821
+          ],
+          "yaw": 180,
+          "support_triangle": 2764,
+          "support_normal": [
+            0.08647,
+            -3e-05,
+            0.99625
+          ]
+        },
+        {
+          "location": [
+            -60,
+            30,
+            69.823
+          ],
+          "yaw": 180,
+          "support_triangle": 2764,
+          "support_normal": [
+            0.08647,
+            -3e-05,
+            0.99625
+          ]
+        },
+        {
+          "location": [
+            60,
+            -30,
+            69.816
+          ],
+          "yaw": 0,
+          "support_triangle": 2678,
+          "support_normal": [
+            -0.08648,
+            -2e-05,
+            0.99625
+          ]
+        },
+        {
+          "location": [
+            60,
+            30,
+            69.817
+          ],
+          "yaw": 0,
+          "support_triangle": 2678,
+          "support_normal": [
+            -0.08648,
+            -2e-05,
+            0.99625
+          ]
+        }
+      ],
+      "visual_passenger_acceptance": "pending"
+    }
+  }
+}

@@ -168,10 +168,34 @@ public:
 	void ToggleSettingsMenu();
 
 	UFUNCTION(BlueprintCallable, Category = "Settings")
+	void OpenControlRemapping(bool bGamepad = false);
+
+	UFUNCTION(BlueprintCallable, Category = "Settings")
 	void SetMotorcyclePhysicsMode(EMotorcyclePhysicsMode NewMode);
 
 	UFUNCTION(BlueprintCallable, Category = "Travel")
 	void TravelToMap(const FString& MapName);
+
+	// Runtime copies retain authored modifiers; source input assets are never edited.
+	void InitializeControlRemapping();
+	bool RemapControl(int32 BindingIndex, FKey NewKey);
+	void RestoreControlDefaults();
+	FString GetActionKeyLabel(const UInputAction* Action) const;
+	TArray<FString> GetControlRemappingLines() const;
+	bool bControlRemappingOpen = false;
+	bool bCapturingControl = false;
+	bool bRemapGamepad = false;
+	int32 ControlRemappingSelection = 0;
+	FString ControlRemappingFeedback;
+	struct FControlBinding
+	{
+		UInputMappingContext* Context = nullptr;
+		int32 MappingIndex = 0;
+		FKey DefaultKey;
+		FString SaveId;
+		FString Label;
+	};
+	TArray<FControlBinding> ControlBindings;
 
 protected:
 	virtual void BeginPlay() override;
@@ -190,6 +214,12 @@ protected:
 	void AdjustSelectedSetting(int32 Direction);
 	void ActivateSelectedSetting();
 	void ResetPlayerInputSettings();
+	void HandleControlRemappingInput(const FInputKeyEventArgs& Params);
+	void RebuildControlMappings();
+	void SaveControlRemapping() const;
+	TArray<int32> GetVisibleControlBindings() const;
+	FString GetKeyLabel(FKey Key) const;
+	bool bControlMappingsInitialized = false;
 
 	void OnMove(const FInputActionValue& Value);
 	void OnLook(const FInputActionValue& Value);
@@ -234,4 +264,6 @@ protected:
 
 	FInputDeviceId LastActiveGamepadDeviceId = INPUTDEVICEID_NONE;
 	bool bSprintToggleActive = false;
+	float OtherVehicleThrottle = 0.f;
+	float OtherVehicleReverse = 0.f;
 };

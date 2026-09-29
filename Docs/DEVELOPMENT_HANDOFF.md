@@ -1,5 +1,18 @@
 # Carnival development handoff — updated 2026-09-28
 
+## Latest completion pass — 2026-09-29
+
+Read `Docs/COMPLETION_PASS_20260929.md` first for the stopped six-area completion
+checkpoint: final editor build passed, final focused ride suite passed 8/8,
+saved remapping, gameplay/ride fixes, passing stairs and underground tunnels,
+and the precise remaining world and rendered acceptance. Work stopped at the
+user's request to commit and push; the complete demo is not accepted.
+This supersedes older failures only where fresh evidence is explicitly recorded.
+
+## Latest expansion continuation — 2026-09-29
+
+Read `Docs/WorldExpansion/CONTINUATION_20260929.md` for the saved outer-route repairs, stronger static audit, current PIE and package evidence, failed stairs/tunnels, Lab B visibility findings, runtime-warning review, and remaining input work. The first-demo queue remains open. Preserve the completed motorcycle retry and settings navigation/saving work.
+
 ## Latest continuation — Eli actor and full mission PIE acceptance (2026-09-28)
 
 - Added `InteractionTargetActor` to `ACarnivalMissionInteractionActor`; focus distance and visibility now resolve against the referenced actor when set. Other existing mission interactions keep their current self-target behavior.

@@ -15,6 +15,7 @@
 #include "CarnivalWeaponBase.h"
 #include "CarnivalBuildComponent.h"
 #include "CarnivalActivityBase.h"
+#include "CarnivalLadder.h"
 #include "CarnivalMissionInteractionActor.h"
 #include "CarnivalRideAttendant.h"
 #include "CarnivalRidePassengerComponent.h"
@@ -92,6 +93,11 @@ void ACarnivalPlayerCharacter::BeginPlay()
 void ACarnivalPlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	if (IsParkourTraversing())
+	{
+		UpdateParkourTraversal(DeltaTime);
+		return;
+	}
     if (OperatingRide && (!IsValid(OperatingRide) || OperatingRide->PlayerOperator != this))
     {
         OperatingRide = nullptr;
@@ -107,6 +113,8 @@ void ACarnivalPlayerCharacter::Tick(float DeltaTime)
 
 	// Update movement state based on movement component
 	if (LocomotionState != ECarnivalLocomotionState::RidingMotorcycle &&
+		LocomotionState != ECarnivalLocomotionState::DrivingBoat &&
+		LocomotionState != ECarnivalLocomotionState::PilotingHovercraft &&
 		LocomotionState != ECarnivalLocomotionState::Vaulting &&
 		LocomotionState != ECarnivalLocomotionState::Mantling &&
 		LocomotionState != ECarnivalLocomotionState::LandingRoll)
@@ -316,6 +324,7 @@ void ACarnivalPlayerCharacter::SetLocomotionState(ECarnivalLocomotionState NewSt
 
 void ACarnivalPlayerCharacter::StartSprinting()
 {
+	if (IsParkourTraversing()) return;
     if (IsUsingRide()) return;
 	if (!bIsCrouched && !bIsProne && LocomotionState != ECarnivalLocomotionState::RidingMotorcycle)
 	{
@@ -326,6 +335,7 @@ void ACarnivalPlayerCharacter::StartSprinting()
 
 void ACarnivalPlayerCharacter::StopSprinting()
 {
+	if (IsParkourTraversing()) return;
 	if (!bIsCrouched && !bIsProne && LocomotionState != ECarnivalLocomotionState::RidingMotorcycle)
 	{
 		GetCharacterMovement()->MaxWalkSpeed = JogSpeed;
@@ -335,6 +345,7 @@ void ACarnivalPlayerCharacter::StopSprinting()
 
 void ACarnivalPlayerCharacter::ToggleCrouch()
 {
+	if (IsParkourTraversing()) return;
     if (IsUsingRide()) return;
 	if (bIsProne)
 	{
@@ -356,10 +367,18 @@ void ACarnivalPlayerCharacter::ToggleCrouch()
 
 void ACarnivalPlayerCharacter::ToggleProne()
 {
+	if (IsParkourTraversing()) return;
     if (IsUsingRide()) return;
 	if (bIsProne)
 	{
-		// Exit prone to stand
+		const float Scale = GetCapsuleComponent()->GetShapeScale();
+		const FVector StandingLocation = GetActorLocation() + FVector(0, 0,
+			(DefaultCapsuleHalfHeight - GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight()) * Scale);
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(CarnivalProneClearance), false, this);
+		if (GetWorld()->OverlapBlockingTestByProfile(StandingLocation, FQuat::Identity, TEXT("Pawn"),
+			FCollisionShape::MakeCapsule(DefaultCapsuleRadius * Scale, DefaultCapsuleHalfHeight * Scale), Params)) return;
+		// Preserve the feet position and only stand after checking the full capsule.
+		SetActorLocation(StandingLocation);
 		bIsProne = false;
 		GetCapsuleComponent()->SetCapsuleSize(DefaultCapsuleRadius, DefaultCapsuleHalfHeight);
 		GetMesh()->SetRelativeLocation(FVector(0.0f, 0.0f, -DefaultCapsuleHalfHeight));
@@ -375,10 +394,14 @@ void ACarnivalPlayerCharacter::ToggleProne()
 		if (bIsCrouched)
 		{
 			UnCrouch();
+			if (bIsCrouched) return;
 		}
+		const float Lowering = (GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight() - 30.f)
+			* GetCapsuleComponent()->GetShapeScale();
 		bIsProne = true;
 		LocomotionState = ECarnivalLocomotionState::Prone;
-		GetCapsuleComponent()->SetCapsuleSize(DefaultCapsuleRadius, 30.0f);
+		GetCapsuleComponent()->SetCapsuleSize(FMath::Min(DefaultCapsuleRadius, 30.f), 30.0f);
+		SetActorLocation(GetActorLocation() - FVector(0, 0, Lowering), true);
 		GetMesh()->SetRelativeLocation(FVector(0.0f, 0.0f, -30.0f));
 		GetCharacterMovement()->MaxWalkSpeed = ProneSpeed;
 		if (StandToProneMontage)
@@ -390,67 +413,152 @@ void ACarnivalPlayerCharacter::ToggleProne()
 
 bool ACarnivalPlayerCharacter::TryVaultOrMantle()
 {
-    if (IsUsingRide()) return false;
-	if (LocomotionState == ECarnivalLocomotionState::RidingMotorcycle)
+	if (IsParkourTraversing()) return true;
+	if (IsUsingRide() || MountedMotorcycle || MountedBoat || MountedHovercraft || bIsProne || bIsCrouched
+		|| !GetCharacterMovement()->IsMovingOnGround()) return false;
+	const FVector Start = GetActorLocation();
+	const FVector Forward = FRotator(0, GetActorRotation().Yaw, 0).Vector();
+	const float HalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	const float Radius = GetCapsuleComponent()->GetScaledCapsuleRadius();
+	const float FeetZ = Start.Z - HalfHeight;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(CarnivalParkour), false, this);
+	FHitResult Wall, Top;
+	const FVector LowStart(Start.X, Start.Y, FeetZ + 50.f);
+	if (!GetWorld()->LineTraceSingleByChannel(Wall, LowStart, LowStart + Forward * 130.f, ECC_Visibility, Params)
+		|| Wall.ImpactNormal.Z > .4f) return false;
+	FVector TopProbe = Wall.ImpactPoint + Forward * 10.f;
+	TopProbe.Z = FeetZ + 250.f;
+	if (!GetWorld()->LineTraceSingleByChannel(Top, TopProbe, TopProbe - FVector(0, 0, 250), ECC_Visibility, Params)
+		|| Top.ImpactNormal.Z < GetCharacterMovement()->GetWalkableFloorZ()) return false;
+	const float Height = Top.ImpactPoint.Z - FeetZ;
+	if (Height < 40.f || Height > 230.f) return false;
+	FVector Destination = Wall.ImpactPoint + Forward * (Radius + 8.f);
+	Destination.Z = Top.ImpactPoint.Z + HalfHeight + 3.f;
+	bool bVault = false;
+	if (Height <= 115.f)
 	{
-		return false;
-	}
-
-	FVector Start = GetActorLocation();
-	FVector Forward = GetActorForwardVector();
-	FVector ChestStart = Start + FVector(0.0f, 0.0f, 20.0f);
-	FVector ChestEnd = ChestStart + Forward * 130.0f;
-
-	FHitResult WallHit;
-	FCollisionQueryParams Params;
-	Params.AddIgnoredActor(this);
-
-	if (GetWorld()->LineTraceSingleByChannel(WallHit, ChestStart, ChestEnd, ECC_WorldStatic, Params))
-	{
-		// Find obstacle height
-		FVector TraceTopDownStart = WallHit.ImpactPoint + Forward * 20.0f + FVector(0.0f, 0.0f, 150.0f);
-		FVector TraceTopDownEnd = TraceTopDownStart - FVector(0.0f, 0.0f, 200.0f);
-		FHitResult HeightHit;
-
-		if (GetWorld()->LineTraceSingleByChannel(HeightHit, TraceTopDownStart, TraceTopDownEnd, ECC_WorldStatic, Params))
+		FVector LandingProbe = Wall.ImpactPoint + Forward * 200.f;
+		LandingProbe.Z = Top.ImpactPoint.Z + 10.f;
+		FHitResult Landing;
+		if (GetWorld()->LineTraceSingleByChannel(Landing, LandingProbe,
+			LandingProbe - FVector(0, 0, Height + 60.f), ECC_Visibility, Params)
+			&& Landing.ImpactNormal.Z >= GetCharacterMovement()->GetWalkableFloorZ()
+			&& Landing.ImpactPoint.Z < Top.ImpactPoint.Z - 20.f)
 		{
-			float ObstacleHeight = HeightHit.ImpactPoint.Z - (Start.Z - DefaultCapsuleHalfHeight);
-
-			// Vault check (waist-high and thin)
-			if (ObstacleHeight > 40.0f && ObstacleHeight <= 115.0f && VaultMontage)
-			{
-				SetLocomotionState(ECarnivalLocomotionState::Vaulting);
-				PlayAnimMontage(VaultMontage);
-				return true;
-			}
-			// 1M Mantle check
-			else if (ObstacleHeight > 115.0f && ObstacleHeight <= 170.0f && Mantle1MMontage)
-			{
-				SetLocomotionState(ECarnivalLocomotionState::Mantling);
-				PlayAnimMontage(Mantle1MMontage);
-				return true;
-			}
-			// 2M Mantle check
-			else if (ObstacleHeight > 170.0f && ObstacleHeight <= 230.0f && Mantle2MMontage)
-			{
-				SetLocomotionState(ECarnivalLocomotionState::Mantling);
-				PlayAnimMontage(Mantle2MMontage);
-				return true;
-			}
+			Destination = Landing.ImpactPoint + FVector(0, 0, HalfHeight + 3.f);
+			bVault = true;
 		}
 	}
-
-	return false;
+	if (!bVault)
+	{
+		FHitResult Landing;
+		if (!GetWorld()->LineTraceSingleByChannel(Landing, Destination,
+			Destination - FVector(0, 0, HalfHeight + 10.f), ECC_Visibility, Params)
+			|| Landing.ImpactNormal.Z < GetCharacterMovement()->GetWalkableFloorZ()
+			|| FMath::Abs(Landing.ImpactPoint.Z - Top.ImpactPoint.Z) > 5.f) return false;
+	}
+	const float ClearanceZ = Top.ImpactPoint.Z + HalfHeight + 5.f;
+	const TArray<FVector> Path = {FVector(Start.X, Start.Y, ClearanceZ),
+		FVector(Destination.X, Destination.Y, ClearanceZ), Destination};
+	return BeginParkourTraversal(Path, bVault ? ECarnivalLocomotionState::Vaulting : ECarnivalLocomotionState::Mantling,
+		bVault ? VaultMontage : (Height <= 170.f ? Mantle1MMontage : Mantle2MMontage));
 }
 
 bool ACarnivalPlayerCharacter::TryLadderClimb()
 {
-	// Ladder trace logic
+	if (IsParkourTraversing()) return true;
+	if (IsUsingRide() || MountedMotorcycle || MountedBoat || MountedHovercraft || bIsProne || bIsCrouched
+		|| !GetCharacterMovement()->IsMovingOnGround()) return false;
+	const float HalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	for (TActorIterator<ACarnivalLadder> It(GetWorld()); It; ++It)
+	{
+		const FVector Bottom = It->BottomExit->GetComponentLocation() + FVector(0, 0, HalfHeight + 3.f);
+		const FVector Top = It->TopExit->GetComponentLocation() + FVector(0, 0, HalfHeight + 3.f);
+		if (Top.Z - Bottom.Z < 80.f) continue;
+		const float BottomDistance = FVector::Dist(GetActorLocation(), Bottom);
+		const float TopDistance = FVector::Dist(GetActorLocation(), Top);
+		const bool bGoingUp = BottomDistance <= TopDistance;
+		if (FMath::Min(BottomDistance, TopDistance) > It->InteractionDistance) continue;
+		const FVector Destination = bGoingUp ? Top : Bottom;
+		FHitResult Floor;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(CarnivalLadder), false, this);
+		if (!GetWorld()->LineTraceSingleByChannel(Floor, Destination,
+			Destination - FVector(0, 0, HalfHeight + 20.f), ECC_Visibility, Params)
+			|| Floor.ImpactNormal.Z < GetCharacterMovement()->GetWalkableFloorZ()
+			|| FMath::Abs(Floor.ImpactPoint.Z + HalfHeight + 3.f - Destination.Z) > 8.f) continue;
+		const FVector AboveBottom(Bottom.X, Bottom.Y, Top.Z);
+		const TArray<FVector> Path = bGoingUp ? TArray<FVector>{Bottom, AboveBottom, Top}
+			: TArray<FVector>{Top, AboveBottom, Bottom};
+		if (BeginParkourTraversal(Path, ECarnivalLocomotionState::LadderClimbing, nullptr)) return true;
+	}
 	return false;
+}
+
+bool ACarnivalPlayerCharacter::BeginParkourTraversal(const TArray<FVector>& Path,
+	ECarnivalLocomotionState State, UAnimMontage* Montage)
+{
+	if (Path.IsEmpty()) return false;
+	const auto Shape = FCollisionShape::MakeCapsule(GetCapsuleComponent()->GetScaledCapsuleRadius(),
+		GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(CarnivalParkourClearance), false, this);
+	FVector Previous = GetActorLocation();
+	for (const FVector& Point : Path)
+	{
+		FHitResult Hit;
+		if (GetWorld()->OverlapBlockingTestByProfile(Point, FQuat::Identity, TEXT("Pawn"), Shape, Params)
+			|| GetWorld()->SweepSingleByProfile(Hit, Previous, Point, FQuat::Identity, TEXT("Pawn"), Shape, Params)) return false;
+		Previous = Point;
+	}
+	ParkourPath = Path;
+	ParkourPointIndex = 0;
+	if (BuildComponent && BuildComponent->bIsBuildModeActive) BuildComponent->ToggleBuildMode();
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->DisableMovement();
+	ConsumeMovementInputVector();
+	SetLocomotionState(State);
+	if (Montage) PlayAnimMontage(Montage);
+	return true;
+}
+
+void ACarnivalPlayerCharacter::UpdateParkourTraversal(float DeltaTime)
+{
+	float Remaining = FMath::Max(0.f, DeltaTime) * FMath::Max(50.f, ParkourTraversalSpeed);
+	while (ParkourPath.IsValidIndex(ParkourPointIndex) && Remaining > 0.f)
+	{
+		const FVector Current = GetActorLocation();
+		const FVector Delta = ParkourPath[ParkourPointIndex] - Current;
+		const float Distance = Delta.Size();
+		if (Distance < .1f) { ++ParkourPointIndex; continue; }
+		const float Step = FMath::Min(Remaining, Distance);
+		FHitResult Hit;
+		SetActorLocation(Current + Delta * (Step / Distance), true, &Hit);
+		if (Hit.bBlockingHit) { CancelParkourTraversal(); return; }
+		Remaining -= Step;
+		if (Step >= Distance - .1f) ++ParkourPointIndex;
+	}
+	if (!ParkourPath.IsValidIndex(ParkourPointIndex)) CancelParkourTraversal();
+}
+
+void ACarnivalPlayerCharacter::CancelParkourTraversal()
+{
+	if (!IsParkourTraversing()) return;
+	ParkourPath.Reset();
+	if (UAnimInstance* Anim = GetMesh()->GetAnimInstance()) Anim->Montage_Stop(0.f);
+	GetMesh()->ConsumeRootMotion();
+	GetCharacterMovement()->StopMovementImmediately();
+	ConsumeMovementInputVector();
+	FHitResult Floor;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(CarnivalParkourLanding), false, this);
+	const bool bSupported = GetWorld()->LineTraceSingleByChannel(Floor, GetActorLocation(),
+		GetActorLocation() - FVector(0, 0, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() + 10.f), ECC_Visibility, Params)
+		&& Floor.ImpactNormal.Z >= GetCharacterMovement()->GetWalkableFloorZ();
+	GetCharacterMovement()->SetMovementMode(bSupported ? MOVE_Walking : MOVE_Falling);
+	SetLocomotionState(bSupported ? ECarnivalLocomotionState::Jogging : ECarnivalLocomotionState::Falling);
 }
 
 void ACarnivalPlayerCharacter::TryInteractOrMount()
 {
+	if (IsParkourTraversing()) return;
     if (OperatingRide) return;
     if (RidePassenger->IsRiding())
     {
@@ -561,6 +669,7 @@ void ACarnivalPlayerCharacter::TryInteractOrMount()
 
 void ACarnivalPlayerCharacter::TryContextInteract()
 {
+	if (IsParkourTraversing()) return;
 	if (ACarnivalMissionInteractionActor* MissionInteraction = FindNearbyMissionInteraction())
 	{
 		MissionInteraction->TryInteract(this);
@@ -576,7 +685,6 @@ void ACarnivalPlayerCharacter::TryContextInteract()
 	if (NearbyActivity && NearbyActivity->ActivityState != ECarnivalActivityState::Active)
 	{
 		NearbyActivity->StartActivity(this);
-		ActiveActivity = NearbyActivity;
 		return;
 	}
 	InteractWithRideOperator();
@@ -721,6 +829,7 @@ void ACarnivalPlayerCharacter::PerformMountedAttack(bool bIsShooting, bool bPunc
 
 void ACarnivalPlayerCharacter::EquipWeaponSlot(int32 SlotIndex)
 {
+	if (IsParkourTraversing()) return;
 	TSubclassOf<ACarnivalWeaponBase> TargetClass = nullptr;
 
 	switch (SlotIndex)
@@ -766,14 +875,25 @@ void ACarnivalPlayerCharacter::EquipWeaponSlot(int32 SlotIndex)
 
 void ACarnivalPlayerCharacter::PerformAttack()
 {
+	if (IsParkourTraversing() || IsUsingRide()) return;
 	if (CurrentWeapon)
 	{
 		CurrentWeapon->PerformAttack(this);
 	}
 	else
 	{
-		// Alternate unarmed punch and kick
-		static bool bPunchNext = true;
+		if (GetWorld()->GetTimeSeconds() < NextUnarmedAttackTime) return;
+		NextUnarmedAttackTime = GetWorld()->GetTimeSeconds() + .5;
+		FVector Start; FRotator Aim;
+		GetActorEyesViewPoint(Start, Aim);
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(CarnivalUnarmedAttack), false, this);
+		FHitResult Hit;
+		if (GetWorld()->SweepSingleByChannel(Hit, Start, Start + Aim.Vector() * 160.f, FQuat::Identity,
+			ECC_Visibility, FCollisionShape::MakeSphere(25.f), Params) && IsValid(Hit.GetActor()))
+		{
+			UGameplayStatics::ApplyPointDamage(Hit.GetActor(), 25.f, Aim.Vector(), Hit, GetController(), this, nullptr);
+		}
+		// Alternate per character, without sharing state with NPCs or other players.
 		UAnimMontage* Montage = bPunchNext ? UnarmedPunchMontage : UnarmedKickMontage;
 		if (Montage)
 		{
@@ -785,6 +905,7 @@ void ACarnivalPlayerCharacter::PerformAttack()
 
 void ACarnivalPlayerCharacter::MoveForward(float Value)
 {
+	if (IsParkourTraversing()) return;
     if (IsUsingRide()) return;
 	if ((Controller != nullptr) && (Value != 0.0f) && LocomotionState != ECarnivalLocomotionState::RidingMotorcycle)
 	{
@@ -797,6 +918,7 @@ void ACarnivalPlayerCharacter::MoveForward(float Value)
 
 void ACarnivalPlayerCharacter::MoveRight(float Value)
 {
+	if (IsParkourTraversing()) return;
     if (IsUsingRide()) return;
 	if ((Controller != nullptr) && (Value != 0.0f) && LocomotionState != ECarnivalLocomotionState::RidingMotorcycle)
 	{
@@ -842,6 +964,7 @@ ACarnivalRideAttendant* ACarnivalPlayerCharacter::FindNearbyAttendant() const
 
 void ACarnivalPlayerCharacter::InteractWithRideOperator()
 {
+	if (IsParkourTraversing()) return;
     if (OperatingRide) { LeaveRideOperator(); return; }
     if (RidePassenger->IsRiding()) return;
     if (auto* Attendant = FindNearbyAttendant())
@@ -867,10 +990,10 @@ void ACarnivalPlayerCharacter::HandleRideBoarded(AActor* RideActor, UCarnivalRid
 {
     PreRideCameraLength = CameraBoom->TargetArmLength;
     CameraBoom->TargetArmLength = 200.f;
-    if (RideSeatedAnimation)
+    PreRideAnimationMode = GetMesh()->GetAnimationMode();
+    PreRideAnimClass = GetMesh()->GetAnimClass();
+    if (RideSeatedAnimation && (!Seat || !Seat->bStandingPassenger))
     {
-        PreRideAnimationMode = GetMesh()->GetAnimationMode();
-        PreRideAnimClass = GetMesh()->GetAnimClass();
         GetMesh()->PlayAnimation(RideSeatedAnimation, true);
     }
 }

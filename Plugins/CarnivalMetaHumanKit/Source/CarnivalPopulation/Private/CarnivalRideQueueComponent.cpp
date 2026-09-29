@@ -47,6 +47,7 @@ void UCarnivalRideQueueComponent::DiscoverQueuePoints()
 
 bool UCarnivalRideQueueComponent::EnqueueGuest(AActor* Guest)
 {
+    WaitingGuests.RemoveAll([](const TObjectPtr<AActor>& Existing) { return !IsValid(Existing); });
     if (!IsValid(Guest) || !HasOpenSlot())
     {
         return false;
@@ -67,7 +68,7 @@ bool UCarnivalRideQueueComponent::EnqueueGuest(AActor* Guest)
 
 bool UCarnivalRideQueueComponent::RemoveGuest(AActor* Guest)
 {
-    if (!IsValid(Guest))
+    if (!Guest)
     {
         return false;
     }
@@ -107,34 +108,43 @@ FTransform UCarnivalRideQueueComponent::GetGuestQueueTarget(AActor* Guest) const
     }
 
     int32 Index = INDEX_NONE;
-    for (int32 GuestIndex = 0; GuestIndex < WaitingGuests.Num(); ++GuestIndex)
+    int32 LiveIndex = 0;
+    for (const auto& Waiting : WaitingGuests)
     {
-        if (WaitingGuests[GuestIndex].Get() == Guest)
+        if (!IsValid(Waiting)) continue;
+        if (Waiting.Get() == Guest)
         {
-            Index = GuestIndex;
+            Index = LiveIndex;
             break;
         }
+        ++LiveIndex;
     }
 
-    if (!QueuePoints.IsValidIndex(Index) || !IsValid(QueuePoints[Index]))
+    if (Index == INDEX_NONE) return FTransform::Identity;
+    LiveIndex = 0;
+    for (const auto& Point : QueuePoints)
     {
-        return FTransform::Identity;
+        if (!IsValid(Point)) continue;
+        if (LiveIndex++ == Index) return Point->GetActorTransform();
     }
-
-    return QueuePoints[Index]->GetActorTransform();
+    return FTransform::Identity;
 }
 
 int32 UCarnivalRideQueueComponent::GetQueueLength() const
 {
-    return WaitingGuests.Num();
+    int32 Count = 0;
+    for (const auto& Guest : WaitingGuests) if (IsValid(Guest)) ++Count;
+    return Count;
 }
 
 int32 UCarnivalRideQueueComponent::GetQueueCapacity() const
 {
-    return QueuePoints.Num();
+    int32 Count = 0;
+    for (const auto& Point : QueuePoints) if (IsValid(Point)) ++Count;
+    return Count;
 }
 
 bool UCarnivalRideQueueComponent::HasOpenSlot() const
 {
-    return WaitingGuests.Num() < QueuePoints.Num();
+    return GetQueueLength() < GetQueueCapacity();
 }

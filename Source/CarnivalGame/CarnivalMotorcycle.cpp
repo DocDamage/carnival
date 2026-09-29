@@ -126,6 +126,7 @@ ACarnivalMotorcycle::ACarnivalMotorcycle()
 void ACarnivalMotorcycle::BeginPlay()
 {
 	Super::BeginPlay();
+	SetPhysicsMode(PhysicsMode);
 }
 
 void ACarnivalMotorcycle::Destroyed()
@@ -155,12 +156,16 @@ void ACarnivalMotorcycle::Tick(float DeltaTime)
 		UpdateChaosPhysics(DeltaTime);
 	}
 	const FVector Heading = FRotator(0.f, GetActorRotation().Yaw, 0.f).Vector();
-	const float Distance = FVector::DotProduct(GetActorLocation() - BeforeMove, Heading);
+	// Chaos integrates after the pawn tick; measure its completed movement since
+	// the previous tick instead of comparing locations around AddForce calls.
+	const FVector MovementDelta = GetActorLocation() - (PhysicsMode == EMotorcyclePhysicsMode::ChaosPhysics ? PreviousPhysicsLocation : BeforeMove);
+	PreviousPhysicsLocation = GetActorLocation();
+	const float Distance = FVector::DotProduct(MovementDelta, Heading);
 	WheelSpinDegrees = FMath::Fmod(WheelSpinDegrees + FMath::RadiansToDegrees(Distance / FMath::Max(WheelRadius, 1.f)), 360.f);
 	FrontWheel->SetRelativeRotation(FRotator(-WheelSpinDegrees, SteeringInput * 28.f, 0.f));
 	RearWheel->SetRelativeRotation(FRotator(-WheelSpinDegrees, 0.f, 0.f));
 
-	const float MovementDistance = FVector::Distance(BeforeMove, GetActorLocation());
+	const float MovementDistance = MovementDelta.Size();
 	const bool bDriverRequestsMovement = CurrentRider
 		&& (FMath::Abs(ThrottleInput) > .2f || BrakeReverseInput > .2f);
 	const bool bMotionIsBlocked = PhysicsMode == EMotorcyclePhysicsMode::Arcade
@@ -496,36 +501,103 @@ void ACarnivalMotorcycle::UpdateArcadePhysics(float DeltaTime)
 
 void ACarnivalMotorcycle::UpdateChaosPhysics(float DeltaTime)
 {
-	// Physics-driven fallback using forces
-	if (BikeMesh && BikeMesh->IsSimulatingPhysics())
+	if (!BikeMesh || !BikeMesh->IsSimulatingPhysics() || DeltaTime <= 0.f) return;
+	const FVector Forward = GetActorForwardVector();
+	const FVector Velocity = BikeMesh->GetPhysicsLinearVelocity();
+	CurrentSpeed = FVector::DotProduct(Velocity, Forward);
+	VerticalVelocity = Velocity.Z;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(CarnivalChaosGround), false, this);
+	if (CurrentRider) Params.AddIgnoredActor(CurrentRider);
+	bIsAirborne = true;
+	for (const UStaticMeshComponent* Wheel : {FrontWheel, RearWheel})
 	{
-		if (FMath::Abs(ThrottleInput) > 0.01f)
+		FHitResult Floor;
+		if (GetWorld()->LineTraceSingleByChannel(Floor, Wheel->GetComponentLocation(),
+			Wheel->GetComponentLocation() - FVector(0, 0, WheelRadius + 25.f), ECC_Visibility, Params)
+			&& Floor.ImpactNormal.Z > .35f)
 		{
-			FVector Force = GetActorForwardVector() * ThrottleInput * Acceleration * 250.0f;
-			BikeMesh->AddForce(Force);
+			bIsAirborne = false;
+			LastGroundNormal = Floor.ImpactNormal;
 		}
-		if (FMath::Abs(SteeringInput) > 0.01f)
+	}
+	const UAnimMontage* Montage = CurrentRider ? CurrentRider->GetCurrentMontage() : nullptr;
+	const bool bMounting = Montage && (Montage == CurrentRider->MountLeftMontage || Montage == CurrentRider->MountRightMontage);
+	if (!bIsAirborne)
+	{
+		float TargetSpeed = CurrentSpeed;
+		float Rate = 0.f;
+		if (bMounting || BrakeInput > .01f || bHandbrake)
 		{
-			FVector Torque = FVector(0.0f, 0.0f, SteeringInput * TurnRate * 5000.0f);
-			BikeMesh->AddTorqueInDegrees(Torque);
+			TargetSpeed = 0.f;
+			Rate = BrakingDeceleration * (bMounting ? 1.f : FMath::Max(BrakeInput, bHandbrake ? .55f : 0.f));
 		}
-		CurrentSpeed = FVector::DotProduct(GetVelocity(), GetActorForwardVector());
+		else if (BrakeReverseInput > .01f)
+		{
+			TargetSpeed = CurrentSpeed > 1.f ? 0.f : -ReverseSpeed * BrakeReverseInput;
+			Rate = CurrentSpeed > 1.f ? BrakingDeceleration * BrakeReverseInput : Acceleration * BrakeReverseInput;
+		}
+		else if (FMath::Abs(ThrottleInput) > .01f)
+		{
+			TargetSpeed = ThrottleInput > 0.f ? MaxSpeed * ThrottleInput : ReverseSpeed * ThrottleInput;
+			Rate = Acceleration;
+		}
+		else
+		{
+			TargetSpeed = 0.f;
+			Rate = 400.f;
+		}
+		// Acceleration-change forces make handling independent of authored body mass.
+		// Clamp the requested change so braking cannot reverse velocity in one step.
+		const float DesiredSpeed = FMath::FInterpConstantTo(CurrentSpeed, TargetSpeed, DeltaTime, Rate);
+		BikeMesh->AddForce(Forward * ((DesiredSpeed - CurrentSpeed) / DeltaTime), NAME_None, true);
+		const FVector Right = GetActorRightVector();
+		const float LateralSpeed = FVector::DotProduct(Velocity, Right);
+		const float Grip = bHandbrake ? 1.5f : 6.f;
+		BikeMesh->AddForce(-Right * LateralSpeed * FMath::Min(Grip, 1.f / DeltaTime), NAME_None, true);
+	}
+	if (!bMounting)
+	{
+		const float SteeringAuthority = bIsAirborne ? .2f : FMath::Clamp(FMath::Abs(CurrentSpeed) / 500.f, 0.f, 1.f);
+		const float ReverseDirection = CurrentSpeed < -1.f ? -1.f : 1.f;
+		const FVector YawTorque = FVector::UpVector * FMath::DegreesToRadians(SteeringInput * TurnRate * 3.f * SteeringAuthority * ReverseDirection);
+		const FVector PitchTorque = -GetActorRightVector() * FMath::DegreesToRadians(RiderBalanceInput * AirPitchRate * (bIsAirborne ? 2.f : .6f));
+		BikeMesh->AddTorqueInRadians(YawTorque + PitchTorque, NAME_None, true);
 	}
 }
 
 void ACarnivalMotorcycle::SetPhysicsMode(EMotorcyclePhysicsMode NewMode)
 {
-	PhysicsMode = NewMode;
-	if (BikeMesh)
+	if (!BikeMesh) return;
+	if (bDismounting && NewMode != PhysicsMode) return;
+	PreviousPhysicsLocation = GetActorLocation();
+	if (NewMode == EMotorcyclePhysicsMode::ChaosPhysics)
 	{
-		if (PhysicsMode == EMotorcyclePhysicsMode::ChaosPhysics)
+		// An unconfigured skeletal body must remain drivable in arcade mode.
+		if (!BikeMesh->GetSkeletalMeshAsset() || !BikeMesh->GetPhysicsAsset())
 		{
-			BikeMesh->SetSimulatePhysics(true);
+			PhysicsMode = EMotorcyclePhysicsMode::Arcade;
+			return;
 		}
-		else
+		if (!BikeMesh->IsSimulatingPhysics())
 		{
+			const FVector EntryVelocity = GetActorForwardVector() * CurrentSpeed + FVector(0, 0, VerticalVelocity);
+			BikeMesh->SetSimulatePhysics(true);
+			if (!BikeMesh->IsSimulatingPhysics()) { PhysicsMode = EMotorcyclePhysicsMode::Arcade; return; }
+			BikeMesh->SetPhysicsLinearVelocity(EntryVelocity);
+			BikeMesh->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+		}
+		PhysicsMode = EMotorcyclePhysicsMode::ChaosPhysics;
+	}
+	else
+	{
+		if (BikeMesh->IsSimulatingPhysics())
+		{
+			const FVector ExitVelocity = BikeMesh->GetPhysicsLinearVelocity();
+			CurrentSpeed = FVector::DotProduct(ExitVelocity, GetActorForwardVector());
+			VerticalVelocity = ExitVelocity.Z;
 			BikeMesh->SetSimulatePhysics(false);
 		}
+		PhysicsMode = EMotorcyclePhysicsMode::Arcade;
 	}
 }
 

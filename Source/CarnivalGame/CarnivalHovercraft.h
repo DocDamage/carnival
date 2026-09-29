@@ -24,6 +24,8 @@ public:
 
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+	virtual void UnPossessed() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UBoxComponent* CollisionBox;
@@ -116,10 +118,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Hover|Input")
 	void InputBoost(bool bEnable);
 
+	UFUNCTION(BlueprintCallable, Category = "Hover|Input")
+	void ClearControlInputs();
+
 protected:
 	virtual void BeginPlay() override;
 
 	void UpdateHoverPhysics(float DeltaTime);
+	void RestoreRider(bool bEmergency);
+	void RecoverLostPossession();
+	FTransform BoardingTransform;
+	TWeakObjectPtr<AController> BoardingController;
+	float FallVelocity = 0.f;
 
 	float ThrottleInput = 0.0f;
 	float SteeringInput = 0.0f;
@@ -127,4 +137,3 @@ protected:
 	float CurrentBank = 0.0f;
 	float CurrentPitch = 0.0f;
 };
-

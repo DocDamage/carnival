@@ -5,6 +5,11 @@
 #include "EnhancedInputSubsystems.h"
 #include "CarnivalPlayerCharacter.h"
 #include "CarnivalMotorcycle.h"
+#include "CarnivalBoat.h"
+#include "CarnivalHovercraft.h"
+#include "CarnivalBumperCar.h"
+#include "CarnivalAudioSettingsSubsystem.h"
+#include "CarnivalActivityBase.h"
 #include "CarnivalBuildComponent.h"
 #include "CarnivalRideOperationComponent.h"
 #include "CarnivalHUD.h"
@@ -17,7 +22,7 @@
 namespace
 {
 constexpr const TCHAR* CarnivalInputSettingsSection = TEXT("Carnival.InputSettings");
-constexpr int32 CarnivalInputSettingsRows = 5;
+constexpr int32 CarnivalInputSettingsRows = 7;
 
 FVector2D ApplyRadialDeadZone(FVector2D Value, float DeadZone)
 {
@@ -62,7 +67,8 @@ bool ACarnivalPlayerController::InputKey(const FInputKeyEventArgs& Params)
 
 	if (bSettingsMenuOpen)
 	{
-		HandleSettingsMenuInput(Params);
+		if (bControlRemappingOpen) HandleControlRemappingInput(Params);
+		else HandleSettingsMenuInput(Params);
 		return true;
 	}
 
@@ -83,6 +89,22 @@ void ACarnivalPlayerController::OnUnPossess()
 
 void ACarnivalPlayerController::ClearCurrentPawnInputs(bool bLeaveRideOperator)
 {
+    if (auto* Car = Cast<ACarnivalBumperCar>(GetPawn())) Car->ClearControlInputs();
+	OtherVehicleThrottle = 0.f;
+	OtherVehicleReverse = 0.f;
+	if (auto* Boat = Cast<ACarnivalBoat>(GetPawn()))
+	{
+		Boat->InputThrottle(0.f);
+		Boat->InputSteering(0.f);
+		Boat->InputBrake(0.f);
+	}
+	if (auto* Hover = Cast<ACarnivalHovercraft>(GetPawn()))
+	{
+		Hover->InputThrottle(0.f);
+		Hover->InputSteering(0.f);
+		Hover->InputStrafe(0.f);
+		Hover->InputBoost(false);
+	}
 	if (auto* Bike = Cast<ACarnivalMotorcycle>(GetPawn()))
 	{
 		Bike->InputThrottle(0.f);
@@ -167,6 +189,10 @@ void ACarnivalPlayerController::AdjustSelectedSetting(int32 Direction)
 	case 1:
 		StickDeadZone = FMath::Clamp(StickDeadZone + Direction * .025f, .05f, .3f);
 		break;
+	case 6:
+        if (auto* Audio = GetGameInstance() ? GetGameInstance()->GetSubsystem<UCarnivalAudioSettingsSubsystem>() : nullptr)
+            Audio->SetMasterVolume(Audio->MasterVolume + Direction * .1f);
+        return;
 	default:
 		return;
 	}
@@ -188,10 +214,23 @@ void ACarnivalPlayerController::ActivateSelectedSetting()
 	case 4:
 		ResetPlayerInputSettings();
 		return;
+	case 5:
+		OpenControlRemapping(bUsingGamepad);
+		return;
 	default:
 		return;
 	}
 	SavePlayerInputSettings();
+}
+
+void ACarnivalPlayerController::OpenControlRemapping(bool bGamepad)
+{
+	if (!bSettingsMenuOpen) ToggleSettingsMenu();
+	bControlRemappingOpen = true;
+	bCapturingControl = false;
+	bRemapGamepad = bGamepad;
+	ControlRemappingSelection = 0;
+	ControlRemappingFeedback.Reset();
 }
 
 void ACarnivalPlayerController::ResetPlayerInputSettings()
@@ -209,16 +248,13 @@ void ACarnivalPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 	LoadPlayerInputSettings();
+    if (auto* Audio = GetGameInstance() ? GetGameInstance()->GetSubsystem<UCarnivalAudioSettingsSubsystem>() : nullptr)
+        Audio->ApplyToWorld(GetWorld());
+	InitializeControlRemapping();
 	if (UGameInstance* GameInstance = GetGameInstance())
 		GameInstance->OnInputDeviceConnectionChange.AddDynamic(this, &ACarnivalPlayerController::HandleInputDeviceConnectionChange);
 
-	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
-	{
-		if (DefaultMappingContext)
-		{
-			Subsystem->AddMappingContext(DefaultMappingContext, 0);
-		}
-	}
+	RebuildControlMappings();
 }
 
 void ACarnivalPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -254,7 +290,7 @@ void ACarnivalPlayerController::OnPossess(APawn* InPawn)
 
 	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
 	{
-		if (InPawn && InPawn->IsA<ACarnivalMotorcycle>())
+		if (InPawn && (InPawn->IsA<ACarnivalMotorcycle>() || InPawn->IsA<ACarnivalBoat>() || InPawn->IsA<ACarnivalHovercraft>() || InPawn->IsA<ACarnivalBumperCar>()))
 		{
 			if (DefaultMappingContext)
 			{
@@ -473,7 +509,7 @@ void ACarnivalPlayerController::OnJumpVault()
 	{
 		if (IsValid(Char->OperatingRide)) { Char->OperatingRide->OperatorStop(Char); return; }
 		if (Char->IsUsingRide()) return;
-		if (!Char->TryVaultOrMantle())
+		if (!Char->TryLadderClimb() && !Char->TryVaultOrMantle())
 		{
 			Char->Jump();
 		}
@@ -515,9 +551,12 @@ void ACarnivalPlayerController::OnContextInteract()
 
 void ACarnivalPlayerController::OnCancel()
 {
+    if (auto* Car = Cast<ACarnivalBumperCar>(GetPawn())) { Car->RequestExit(); return; }
 	if (auto* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()))
 	{
+		Char->CancelParkourTraversal();
 		Char->LeaveRideOperator();
+		if (Char->ActiveActivity) Char->ActiveActivity->AbortActivity();
 		Char->TryRecoverToSafePosition();
 	}
 }
@@ -551,11 +590,14 @@ void ACarnivalPlayerController::OnToggleProne()
 
 void ACarnivalPlayerController::OnInteractMount()
 {
+    if (auto* Car = Cast<ACarnivalBumperCar>(GetPawn())) { Car->RequestExit(); return; }
 	if (ACarnivalMotorcycle* Bike = Cast<ACarnivalMotorcycle>(GetPawn()))
 	{
 		// Currently on bike -> dismount
 		Bike->Dismount();
 	}
+	else if (auto* Boat = Cast<ACarnivalBoat>(GetPawn())) Boat->Dismount();
+	else if (auto* Hover = Cast<ACarnivalHovercraft>(GetPawn())) Hover->Dismount();
 	else if (ACarnivalPlayerCharacter* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()))
 	{
 		// On foot -> try mount or interact
@@ -565,7 +607,7 @@ void ACarnivalPlayerController::OnInteractMount()
 
 void ACarnivalPlayerController::OnAttack()
 {
-	if (auto* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()); Char && Char->IsUsingRide()) return;
+	if (auto* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()); Char && (Char->IsUsingRide() || Char->IsParkourTraversing())) return;
 	if (ACarnivalPlayerCharacter* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()))
 	{
 		if (Char->BuildComponent && Char->BuildComponent->bIsBuildModeActive)
@@ -590,6 +632,7 @@ void ACarnivalPlayerController::OnSecondary()
 {
 	if (ACarnivalPlayerCharacter* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()))
 	{
+		if (Char->IsParkourTraversing()) return;
 		if (Char->BuildComponent && Char->BuildComponent->bIsBuildModeActive)
 		{
 			Char->BuildComponent->DemolishPiece();
@@ -601,7 +644,7 @@ void ACarnivalPlayerController::OnToggleBuild()
 {
 	if (ACarnivalPlayerCharacter* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()))
 	{
-		if (Char->IsUsingRide()) return;
+		if (Char->IsUsingRide() || Char->IsParkourTraversing()) return;
 		if (Char->BuildComponent)
 		{
 			Char->BuildComponent->ToggleBuildMode();
@@ -727,6 +770,10 @@ void ACarnivalPlayerController::TravelToMap(const FString& MapName)
 
 void ACarnivalPlayerController::OnThrottle(const FInputActionValue& Value)
 {
+	OtherVehicleThrottle = Value.Get<float>();
+    if (auto* Car = Cast<ACarnivalBumperCar>(GetPawn())) Car->InputThrottle(OtherVehicleThrottle - OtherVehicleReverse);
+	if (auto* Boat = Cast<ACarnivalBoat>(GetPawn())) Boat->InputThrottle(OtherVehicleThrottle - OtherVehicleReverse);
+	if (auto* Hover = Cast<ACarnivalHovercraft>(GetPawn())) Hover->InputThrottle(OtherVehicleThrottle - OtherVehicleReverse);
 	if (ACarnivalMotorcycle* Bike = Cast<ACarnivalMotorcycle>(GetPawn()))
 	{
 		Bike->InputThrottle(Value.Get<float>());
@@ -735,6 +782,9 @@ void ACarnivalPlayerController::OnThrottle(const FInputActionValue& Value)
 
 void ACarnivalPlayerController::OnSteer(const FInputActionValue& Value)
 {
+    if (auto* Car = Cast<ACarnivalBumperCar>(GetPawn())) Car->InputSteering(ApplyAxisDeadZone(Value.Get<float>(), StickDeadZone));
+	if (auto* Boat = Cast<ACarnivalBoat>(GetPawn())) Boat->InputSteering(ApplyAxisDeadZone(Value.Get<float>(), StickDeadZone));
+	if (auto* Hover = Cast<ACarnivalHovercraft>(GetPawn())) Hover->InputSteering(ApplyAxisDeadZone(Value.Get<float>(), StickDeadZone));
 	if (ACarnivalMotorcycle* Bike = Cast<ACarnivalMotorcycle>(GetPawn()))
 	{
 		Bike->InputSteering(ApplyAxisDeadZone(Value.Get<float>(), StickDeadZone));
@@ -743,6 +793,8 @@ void ACarnivalPlayerController::OnSteer(const FInputActionValue& Value)
 
 void ACarnivalPlayerController::OnBrake(const FInputActionValue& Value)
 {
+    if (auto* Car = Cast<ACarnivalBumperCar>(GetPawn())) Car->InputBrake(Value.Get<float>());
+	if (auto* Boat = Cast<ACarnivalBoat>(GetPawn())) Boat->InputBrake(Value.Get<float>());
 	if (ACarnivalMotorcycle* Bike = Cast<ACarnivalMotorcycle>(GetPawn()))
 	{
 		Bike->InputBrake(Value.Get<float>());
@@ -751,18 +803,24 @@ void ACarnivalPlayerController::OnBrake(const FInputActionValue& Value)
 
 void ACarnivalPlayerController::OnHandbrake(const FInputActionValue& Value)
 {
+	if (auto* Hover = Cast<ACarnivalHovercraft>(GetPawn())) Hover->InputBoost(Value.Get<bool>());
 	if (auto* Bike = Cast<ACarnivalMotorcycle>(GetPawn()))
 		Bike->InputHandbrake(Value.Get<bool>());
 }
 
 void ACarnivalPlayerController::OnBrakeReverse(const FInputActionValue& Value)
 {
+	OtherVehicleReverse = Value.Get<float>();
+    if (auto* Car = Cast<ACarnivalBumperCar>(GetPawn())) Car->InputThrottle(OtherVehicleThrottle - OtherVehicleReverse);
+	if (auto* Boat = Cast<ACarnivalBoat>(GetPawn())) Boat->InputThrottle(OtherVehicleThrottle - OtherVehicleReverse);
+	if (auto* Hover = Cast<ACarnivalHovercraft>(GetPawn())) Hover->InputThrottle(OtherVehicleThrottle - OtherVehicleReverse);
 	if (auto* Bike = Cast<ACarnivalMotorcycle>(GetPawn()))
 		Bike->InputBrakeReverse(Value.Get<float>());
 }
 
 void ACarnivalPlayerController::OnRiderBalance(const FInputActionValue& Value)
 {
+	if (auto* Hover = Cast<ACarnivalHovercraft>(GetPawn())) Hover->InputStrafe(ApplyAxisDeadZone(Value.Get<float>(), StickDeadZone));
 	if (auto* Bike = Cast<ACarnivalMotorcycle>(GetPawn()))
 		Bike->InputRiderBalance(ApplyAxisDeadZone(Value.Get<float>(), StickDeadZone));
 }
@@ -770,6 +828,8 @@ void ACarnivalPlayerController::OnRiderBalance(const FInputActionValue& Value)
 void ACarnivalPlayerController::ToggleSettingsMenu()
 {
 	bSettingsMenuOpen = !bSettingsMenuOpen;
+	bControlRemappingOpen = false;
+	bCapturingControl = false;
 	if (bSettingsMenuOpen)
 	{
 		ClearCurrentPawnInputs(false);

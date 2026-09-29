@@ -1,6 +1,7 @@
 #include "CarnivalRidePassengerComponent.h"
 #include "CarnivalPassengerInterface.h"
 #include "CarnivalRideSeatComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
@@ -35,7 +36,9 @@ void UCarnivalRidePassengerComponent::TickComponent(float DeltaTime, ELevelTick 
 
     if (bSnapEveryTick && IsValid(CurrentSeat) && IsValid(GetOwner()))
     {
-        GetOwner()->SetActorTransform(CurrentSeat->GetPassengerWorldTransform(), false, nullptr, ETeleportType::TeleportPhysics);
+        FTransform PassengerTransform = CurrentSeat->GetPassengerWorldTransform();
+        PassengerTransform.SetScale3D(BoardingTransform.GetScale3D());
+        GetOwner()->SetActorTransform(PassengerTransform, false, nullptr, ETeleportType::TeleportPhysics);
     }
 }
 
@@ -69,7 +72,9 @@ bool UCarnivalRidePassengerComponent::BoardRide(AActor* RideActor, UCarnivalRide
     Seat->Occupant = GetOwner();
 
     GetOwner()->AttachToComponent(Seat, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
-    GetOwner()->SetActorTransform(Seat->GetPassengerWorldTransform(), false, nullptr, ETeleportType::TeleportPhysics);
+    FTransform PassengerTransform = Seat->GetPassengerWorldTransform();
+    PassengerTransform.SetScale3D(BoardingTransform.GetScale3D());
+    GetOwner()->SetActorTransform(PassengerTransform, false, nullptr, ETeleportType::TeleportPhysics);
 
     OnBoarded.Broadcast(RideActor, Seat);
 
@@ -78,6 +83,29 @@ bool UCarnivalRidePassengerComponent::BoardRide(AActor* RideActor, UCarnivalRide
         ICarnivalPassengerInterface::Execute_CarnivalRideBoarded(GetOwner(), RideActor, Seat->SeatId, Seat->RestraintType);
     }
 
+    return true;
+}
+
+bool UCarnivalRidePassengerComponent::CanUnboardAt(const FTransform& ExitTransform) const
+{
+    if (!bBoarded || !IsValid(GetOwner()) || !GetWorld()) return false;
+    const ACharacter* Character = Cast<ACharacter>(GetOwner());
+    if (!Character) return true;
+    float Radius, HalfHeight;
+    Character->GetCapsuleComponent()->GetScaledCapsuleSize(Radius, HalfHeight);
+    FCollisionQueryParams Params(SCENE_QUERY_STAT(CarnivalPassengerExit), false, GetOwner());
+    // Do not ignore the ride: its platform, supports, or another moving cabin
+    // can obstruct the original entry point while this passenger is seated.
+    if (GetWorld()->OverlapBlockingTestByProfile(ExitTransform.GetLocation(), ExitTransform.GetRotation(),
+        TEXT("Pawn"), FCollisionShape::MakeCapsule(Radius, HalfHeight), Params)) return false;
+    if (SavedMovementMode == MOVE_Walking || SavedMovementMode == MOVE_NavWalking)
+    {
+        FHitResult Floor;
+        const float Reach = HalfHeight + Character->GetCharacterMovement()->MaxStepHeight + 2.f;
+        if (!GetWorld()->LineTraceSingleByProfile(Floor, ExitTransform.GetLocation(),
+            ExitTransform.GetLocation() - FVector(0, 0, Reach), TEXT("Pawn"), Params)
+            || !Character->GetCharacterMovement()->IsWalkable(Floor)) return false;
+    }
     return true;
 }
 

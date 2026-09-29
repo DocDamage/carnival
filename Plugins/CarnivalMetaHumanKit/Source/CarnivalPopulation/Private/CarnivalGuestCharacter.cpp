@@ -1,5 +1,7 @@
 #include "CarnivalGuestCharacter.h"
 #include "CarnivalRidePassengerComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 
 ACarnivalGuestCharacter::ACarnivalGuestCharacter()
 {
@@ -9,6 +11,12 @@ ACarnivalGuestCharacter::ACarnivalGuestCharacter()
 void ACarnivalGuestCharacter::BeginPlay()
 {
     Super::BeginPlay();
+    // Roaming guests must never seal a doorway or pin the player against a ride.
+    // Keep world collision for walking, while crowd steering handles separation.
+    GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+    GetCapsuleComponent()->SetCanEverAffectNavigation(false);
+    GetMesh()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+    GetMesh()->SetCanEverAffectNavigation(false);
     ApplyRoleLook(GuestRole);
 }
 

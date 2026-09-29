@@ -1,5 +1,7 @@
 # Carnival World Expansion — Validation
 
+**Latest continuation:** See [route and wall-art continuation](CONTINUATION_20260929.md) for the strengthened static audit, fresh PIE results, blocked R10/R11/R12 connections, and rendered Lab B findings. Historical rows below are retained as evidence of earlier archives and must not override the newer record.
+
 Updated 2026-09-29. Project F:\Carnival\CarnivalGame.uproject; Unreal Engine 5.8.3. The supported main map is /Game/Creepwood_Carnival_Meshingun/Environment/Map/LV_Carnival.
 
 ## Results

@@ -48,6 +48,7 @@ for actor in all_actors:
             "level": actor.get_level().get_path_name(),
             "location": [round(location.x, 2), round(location.y, 2), round(location.z, 2)],
             "path": actor.get_path_name(),
+            "assigned_ride": safe(lambda a=actor: a.get_editor_property("ride")),
         })
 
 queue_points = []
@@ -76,6 +77,7 @@ for actor in all_actors:
     bounds_origin, bounds_extent = actor.get_actor_bounds(False)
     components = []
     operation_components = []
+    controller_components = []
     seat_components = []
     queue_components = []
     for component in actor.get_components_by_class(unreal.ActorComponent):
@@ -86,11 +88,14 @@ for actor in all_actors:
         if isinstance(component, unreal.SceneComponent):
             entry["relative_location"] = safe(lambda c=component: c.get_editor_property("relative_location"))
             entry["attach_parent"] = safe(lambda c=component: c.get_attach_parent())
-        if "RideOperationComponent" in comp_class or "RideControllerComponent" in comp_class:
+        if "RideOperationComponent" in comp_class:
             operation_components.append(entry)
-            entry["ride_id"] = safe(lambda c=component: c.get_editor_property("ride_id"))
             entry["state"] = safe(lambda c=component: c.get_editor_property("state"))
             entry["attendant"] = safe(lambda c=component: c.get_editor_property("attendant"))
+            entry["configuration_error"] = safe(lambda c=component: c.get_editor_property("configuration_error"))
+        if "RideControllerComponent" in comp_class:
+            controller_components.append(entry)
+            entry["ride_id"] = safe(lambda c=component: c.get_editor_property("ride_id"))
         if "RideSeatComponent" in comp_class:
             seat_components.append(entry)
             entry["seat_id"] = safe(lambda c=component: c.get_editor_property("seat_id"))
@@ -99,7 +104,7 @@ for actor in all_actors:
             entry["ride_id"] = safe(lambda c=component: c.get_editor_property("ride_id"))
         components.append(entry)
 
-    ride_id = operation_components[0].get("ride_id") if operation_components else None
+    ride_id = controller_components[0].get("ride_id") if controller_components else None
     if not ride_id or str(ride_id).startswith("UNAVAILABLE:"):
         class_lower = class_name.lower()
         inferred_ids = (
@@ -117,6 +122,25 @@ for actor in all_actors:
         nearest.append({"label": attendant["label"], "distance_cm": round(d, 1), "level": attendant["level"]})
     nearest.sort(key=lambda row: row["distance_cm"])
 
+    assigned_attendants = [staff["path"] for staff in attendants
+                           if staff["assigned_ride"] == actor.get_path_name()]
+    class_lower = class_name.lower()
+    experience = ("walkthrough_or_show" if any(word in class_lower for word in ("hauntedhouse", "circus"))
+                  else "driving_arena" if "bumper" in class_lower else "seated_cycle")
+    blockers = []
+    if not assigned_attendants:
+        blockers.append("No attendant references this ride instance")
+    if experience == "seated_cycle":
+        if not controller_components:
+            blockers.append("No passenger controller")
+        if not seat_components:
+            blockers.append("No authored passenger seats")
+        seat_ids = [str(seat["seat_id"]) for seat in seat_components]
+        if len(set(seat_ids)) != len(seat_ids) or any(value in ("", "None") for value in seat_ids):
+            blockers.append("Passenger seat IDs are missing or duplicated")
+    else:
+        blockers.append("Requires separate " + experience + " acceptance; a seated-cycle result does not cover this attraction")
+
     rides.append({
         "label": label,
         "class": class_name,
@@ -127,18 +151,25 @@ for actor in all_actors:
         "bounds_extent": [round(bounds_extent.x, 2), round(bounds_extent.y, 2), round(bounds_extent.z, 2)],
         "ride_id": ride_id,
         "operation_component_count": len(operation_components),
+        "controller_component_count": len(controller_components),
         "seat_component_count": len(seat_components),
         "queue_component_count": len(queue_components),
         "queue_points_for_ride_id": matching_queue_points,
         "operation_components": operation_components,
+        "controller_components": controller_components,
         "seat_components": seat_components,
         "queue_components": queue_components,
         "nearest_attendants": nearest[:3],
+        "assigned_attendants": assigned_attendants,
+        "experience": experience,
+        "authoring_blockers": blockers,
+        "runtime_acceptance": "not_run",
         "components": components,
     })
 
 rides.sort(key=lambda item: (item["level"], item["class"], item["label"]))
 report = {
+    "schema": 2,
     "map": MAP_PATH,
     "generated_at_utc": datetime.now(timezone.utc).isoformat(),
     "saved_map_modified": False,
@@ -155,6 +186,12 @@ report = {
     },
     "ride_instance_count": len(rides),
     "ride_instances": rides,
+    "instances_with_authoring_blockers": sum(bool(ride["authoring_blockers"]) for ride in rides),
+    "shared_queue_ids": {
+        ride_id: [ride["path"] for ride in rides if ride["ride_id"] == ride_id]
+        for ride_id in sorted(set(ride["ride_id"] for ride in rides if ride["ride_id"]))
+        if sum(ride["ride_id"] == ride_id for ride in rides) > 1
+    },
 }
 REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
 REPORT_PATH.write_text(json.dumps(report, indent=2), encoding="utf-8")

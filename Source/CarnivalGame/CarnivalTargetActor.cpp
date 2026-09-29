@@ -2,9 +2,38 @@
 
 #include "CarnivalTargetActor.h"
 #include "CarnivalActivityBase.h"
+#include "CarnivalPlayerCharacter.h"
+#include "CarnivalMotorcycle.h"
+#include "CarnivalBoat.h"
+#include "CarnivalHovercraft.h"
+#include "GameFramework/Controller.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SphereComponent.h"
 #include "GameFramework/Character.h"
+
+namespace
+{
+ACarnivalPlayerCharacter* ResolveTargetPlayer(AActor* Actor)
+{
+	if (auto* Player = Cast<ACarnivalPlayerCharacter>(Actor)) return Player;
+	if (auto* Bike = Cast<ACarnivalMotorcycle>(Actor)) return Bike->CurrentRider;
+	if (auto* Boat = Cast<ACarnivalBoat>(Actor)) return Boat->CurrentRider;
+	if (auto* Hover = Cast<ACarnivalHovercraft>(Actor)) return Hover->CurrentRider;
+	return Actor ? Cast<ACarnivalPlayerCharacter>(Actor->GetInstigator()) : nullptr;
+}
+
+bool HasPlayerControl(const ACarnivalPlayerCharacter* Player)
+{
+	if (!IsValid(Player)) return false;
+	if (Player->IsPlayerControlled()) return true;
+	const APawn* Vehicle = Cast<APawn>(Player->GetAttachParentActor());
+	if (!Vehicle || !Vehicle->IsPlayerControlled()) return false;
+	if (const auto* Bike = Cast<ACarnivalMotorcycle>(Vehicle)) return Bike->CurrentRider == Player && Player->MountedMotorcycle == Bike;
+	if (const auto* Boat = Cast<ACarnivalBoat>(Vehicle)) return Boat->CurrentRider == Player && Player->MountedBoat == Boat;
+	if (const auto* Hover = Cast<ACarnivalHovercraft>(Vehicle)) return Hover->CurrentRider == Player && Player->MountedHovercraft == Hover;
+	return false;
+}
+}
 
 ACarnivalTargetActor::ACarnivalTargetActor()
 {
@@ -44,20 +73,21 @@ void ACarnivalTargetActor::Tick(float DeltaTime)
 	if (bIsRelicOrCollectible && !bIsHit)
 	{
 		AddActorLocalRotation(FRotator(0.0f, 45.0f * DeltaTime, 0.0f));
-		float BobOffset = FMath::Sin(GetWorld()->GetTimeSeconds() * 3.0f) * 0.4f;
-		AddActorWorldOffset(FVector(0.0f, 0.0f, BobOffset));
+		const float BobOffset = FMath::Sin(GetWorld()->GetTimeSeconds() * 3.0f) * 8.0f;
+		SetActorLocation(InitialLocation + FVector(0.0f, 0.0f, BobOffset));
 	}
 }
 
 float ACarnivalTargetActor::TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser)
 {
-	OnCollectedOrHit(DamageCauser);
-	return DamageAmount;
+	if (DamageAmount <= 0.f || bIsRelicOrCollectible || bIsHit) return 0.f;
+	OnCollectedOrHit(EventInstigator ? EventInstigator->GetPawn() : DamageCauser);
+	return bIsHit ? DamageAmount : 0.f;
 }
 
 void ACarnivalTargetActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (bIsRelicOrCollectible && !bIsHit && Cast<ACharacter>(OtherActor))
+	if (bIsRelicOrCollectible && !bIsHit && Cast<ACarnivalPlayerCharacter>(OtherActor))
 	{
 		OnCollectedOrHit(OtherActor);
 	}
@@ -65,7 +95,10 @@ void ACarnivalTargetActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, A
 
 void ACarnivalTargetActor::OnCollectedOrHit(AActor* InstigatorActor)
 {
-	if (bIsHit)
+	ACarnivalPlayerCharacter* Player = ResolveTargetPlayer(InstigatorActor);
+	if (bIsHit || !HasPlayerControl(Player)
+		|| (IsValid(OwningActivity) && (OwningActivity->ActivityState != ECarnivalActivityState::Active
+			|| OwningActivity->ActivePlayer != Player || !OwningActivity->Targets.Contains(this))))
 	{
 		return;
 	}
@@ -90,4 +123,3 @@ void ACarnivalTargetActor::ResetTarget()
 	SetActorHiddenInGame(false);
 	SetActorEnableCollision(true);
 }
-

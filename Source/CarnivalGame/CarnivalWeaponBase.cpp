@@ -5,6 +5,8 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "Kismet/GameplayStatics.h"
+#include "NiagaraFunctionLibrary.h"
+#include "Engine/World.h"
 
 ACarnivalWeaponBase::ACarnivalWeaponBase()
 {
@@ -42,14 +44,50 @@ void ACarnivalWeaponBase::AttachToCharacter(ACharacter* InCharacter, bool bEquip
 	}
 
 	FName TargetSocket = bEquipped ? EquipSocketName : HolsterSocketName;
+	SetOwner(InCharacter);
+	SetInstigator(InCharacter);
 	AttachToComponent(InCharacter->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, TargetSocket);
 }
 
 void ACarnivalWeaponBase::PerformAttack(ACharacter* InstigatingCharacter)
 {
-	if (!InstigatingCharacter)
+	if (!IsValid(InstigatingCharacter) || !GetWorld() || AttackRange <= 0.f || BaseDamage <= 0.f
+		|| GetWorld()->GetTimeSeconds() < NextAttackTime)
 	{
 		return;
+	}
+	NextAttackTime = GetWorld()->GetTimeSeconds() + FMath::Max(.01f, FireRate);
+	LastHitActor = nullptr;
+	LastDamageDealt = 0.f;
+
+	FVector TraceStart;
+	FRotator AimRotation;
+	InstigatingCharacter->GetActorEyesViewPoint(TraceStart, AimRotation);
+	const FVector Direction = AimRotation.Vector();
+	const FVector TraceEnd = TraceStart + Direction * AttackRange;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(CarnivalWeaponAttack), false, InstigatingCharacter);
+	Params.AddIgnoredActor(this);
+	APawn* Mount = Cast<APawn>(InstigatingCharacter->GetAttachParentActor());
+	if (Mount) Params.AddIgnoredActor(Mount);
+	TArray<AActor*> AttachedActors;
+	InstigatingCharacter->GetAttachedActors(AttachedActors, true, true);
+	Params.AddIgnoredActors(AttachedActors);
+	FHitResult Hit;
+	const bool bHit = WeaponType == ECarnivalWeaponType::Revolver
+		? GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, Params)
+		: GetWorld()->SweepSingleByChannel(Hit, TraceStart, TraceEnd, FQuat::Identity, ECC_Visibility,
+			FCollisionShape::MakeSphere(FMath::Max(1.f, MeleeSweepRadius)), Params);
+	if (bHit && IsValid(Hit.GetActor()))
+	{
+		LastHitActor = Hit.GetActor();
+		AController* DamageController = InstigatingCharacter->GetController();
+		if (!DamageController && Mount) DamageController = Mount->GetController();
+		LastDamageDealt = UGameplayStatics::ApplyPointDamage(Hit.GetActor(), BaseDamage, Direction, Hit,
+			DamageController, this, nullptr);
+		if (ImpactEffect)
+		{
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, ImpactEffect, Hit.ImpactPoint, Hit.ImpactNormal.Rotation());
+		}
 	}
 
 	if (AttackMontage && InstigatingCharacter->GetMesh() && InstigatingCharacter->GetMesh()->GetAnimInstance())
@@ -62,4 +100,3 @@ void ACarnivalWeaponBase::PerformAttack(ACharacter* InstigatingCharacter)
 		UGameplayStatics::PlaySoundAtLocation(this, AttackSound, GetActorLocation());
 	}
 }
-

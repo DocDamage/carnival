@@ -5,6 +5,8 @@
 #include "CarnivalRideControllerComponent.h"
 #include "CarnivalRidePassengerComponent.h"
 #include "CarnivalRideSeatComponent.h"
+#include "CarnivalRideQueueComponent.h"
+#include "CarnivalQueuePoint.h"
 #include "CarnivalPlayerCharacter.h"
 #include "CarnivalPlayerController.h"
 #include "CarnivalMotorcycle.h"
@@ -103,6 +105,8 @@ bool FAttendedSwingTest::RunTest(const FString&)
     TestFalse(TEXT("Seat freed after unloading"), Seat->IsOccupied());
     Step(.3f);
     TestTrue(TEXT("Player can take controls"), Operation->TakeOperatorControl(Player));
+    TestTrue(TEXT("Reassigning same attendant is idempotent"), Staff->AssignRide(Ride));
+    TestEqual(TEXT("Idempotent assignment retains player control"), Operation->PlayerOperator.Get(), static_cast<AActor*>(Player));
     TestFalse(TEXT("Another player cannot also operate"), Operation->TakeOperatorControl(Other));
     TestFalse(TEXT("Non-operator cannot start"), Operation->OperatorStart(Other));
     TestTrue(TEXT("Operator starts empty ride"), Operation->OperatorStart(Player));
@@ -119,7 +123,81 @@ bool FAttendedSwingTest::RunTest(const FString&)
     TestFalse(TEXT("Attendant loss safely unloads player"), Player->RidePassenger->IsRiding());
     TestEqual(TEXT("Unstaffed ride closes"), Operation->State, ECarnivalOperationState::Closed);
     TestFalse(TEXT("Unstaffed ride rejects boarding"), Operation->RequestBoard(Player));
+    auto* Replacement = World->SpawnActor<ACarnivalRideAttendant>(FVector(2200,0,91), FRotator::ZeroRotator, Spawn);
+    TestTrue(TEXT("Replacement staff can reopen ride"), Replacement->AssignRide(Ride));
+    Step(.1f);
+    TestEqual(TEXT("Replacement staff reopens boarding"), Operation->State, ECarnivalOperationState::Loading);
+    TestTrue(TEXT("Replacement staff permits operator handover"), Operation->TakeOperatorControl(Player));
+    Player->SetActorLocation(FVector(4000,0,98));
+    Step(.1f);
+    TestNull(TEXT("Leaving controls hands operation back to staff"), Operation->PlayerOperator.Get());
+    Player->SetActorLocation(Entry.GetLocation());
+    TestTrue(TEXT("Returned player can take operator control"), Operation->TakeOperatorControl(Player));
+    Replacement->Destroy();
+    TestNull(TEXT("Staff destruction releases operator immediately"), Operation->PlayerOperator.Get());
+    Step(.1f);
+    Replacement = World->SpawnActor<ACarnivalRideAttendant>(FVector(2200,0,91), FRotator::ZeroRotator, Spawn);
+    Replacement->Experience = ECarnivalRideExperience::Show;
+    Replacement->AssignRide(Ride);
+    Step(.1f);
+    TestTrue(TEXT("Visitor can request an attended show"), Operation->RequestBoard(Player));
+    TestFalse(TEXT("Show visitors are not attached to seats"), Player->RidePassenger->IsRiding());
+    TestTrue(TEXT("Show visitors retain collision"), Player->GetActorEnableCollision());
+    TestFalse(TEXT("Show visitors retain movement"), Player->GetCharacterMovement()->MovementMode == MOVE_None);
+    TestEqual(TEXT("Show request enters timed cycle"), Operation->State, ECarnivalOperationState::Securing);
     AddInfo(FString::Printf(TEXT("Swing metrics: max seat travel %.2f cm; max passenger attachment error %.4f cm; completed cycles %d"), MaxSeatTravel, MaxAttachmentError, Operation->CompletedCycles));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRideQueueRecoveryTest, "Carnival.Rides.QueueRecovery",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FRideQueueRecoveryTest::RunTest(const FString&)
+{
+    UGameInstance* Instance = NewObject<UGameInstance>(GEngine);
+    Instance->InitializeStandalone(TEXT("RideQueueRecovery"));
+    UWorld* World = Instance->GetWorld();
+    ON_SCOPE_EXIT { World->EndPlay(EEndPlayReason::Quit); Instance->Shutdown(); World->DestroyWorld(false); GEngine->DestroyWorldContext(World); };
+    FURL URL; URL.AddOption(TEXT("game=/Script/Engine.GameModeBase"));
+    World->SetGameMode(URL); World->InitializeActorsForPlay(URL); World->BeginPlay();
+    auto* FirstPoint = World->SpawnActor<ACarnivalQueuePoint>();
+    auto* SecondPoint = World->SpawnActor<ACarnivalQueuePoint>();
+    FirstPoint->RideId = SecondPoint->RideId = TEXT("QueueRecovery");
+    FirstPoint->QueueIndex = 0; SecondPoint->QueueIndex = 1;
+    FirstPoint->SetActorLocation(FVector(100,0,0));
+    SecondPoint->SetActorLocation(FVector(200,0,0));
+    auto* Owner = World->SpawnActor<AActor>();
+    auto* Queue = NewObject<UCarnivalRideQueueComponent>(Owner);
+    Queue->RideId = TEXT("QueueRecovery"); Queue->RegisterComponent(); Queue->DiscoverQueuePoints();
+    auto* First = World->SpawnActor<AActor>();
+    auto* Second = World->SpawnActor<AActor>();
+    auto* Third = World->SpawnActor<AActor>();
+    TestTrue(TEXT("First guest enters queue"), Queue->EnqueueGuest(First));
+    TestFalse(TEXT("Duplicate guest is rejected"), Queue->EnqueueGuest(First));
+    TestTrue(TEXT("Second guest fills queue"), Queue->EnqueueGuest(Second));
+    TestFalse(TEXT("Full queue rejects extra guest"), Queue->EnqueueGuest(Third));
+    First->Destroy();
+    TestEqual(TEXT("Destroyed guest frees capacity immediately"), Queue->GetQueueLength(), 1);
+    TestTrue(TEXT("Surviving guest advances past destroyed guest"), Queue->GetGuestQueueTarget(Second).Equals(FirstPoint->GetActorTransform()));
+    TestTrue(TEXT("New guest can use freed slot"), Queue->EnqueueGuest(Third));
+    FirstPoint->Destroy();
+    TestEqual(TEXT("Destroyed marker reduces queue capacity"), Queue->GetQueueCapacity(), 1);
+    TestTrue(TEXT("Queue target skips destroyed marker"), Queue->GetGuestQueueTarget(Second).Equals(SecondPoint->GetActorTransform()));
+    TestEqual(TEXT("Dequeue retains FIFO order"), Queue->PopNextGuest(), Second);
+    TestEqual(TEXT("Final guest can leave"), Queue->PopNextGuest(), Third);
+    TestEqual(TEXT("Queue finishes empty"), Queue->GetQueueLength(), 0);
+
+    auto* Operation = NewObject<UCarnivalRideOperationComponent>(Owner);
+    Operation->RegisterComponent();
+    TestFalse(TEXT("Missing controller rejects initialization"), Operation->InitializeOperation());
+    auto* Controller = NewObject<UCarnivalRideControllerComponent>(Owner);
+    Controller->RegisterComponent();
+    TestFalse(TEXT("Seatless controller is not a ready ride"), Operation->InitializeOperation());
+    TestTrue(TEXT("Retry reports current seat configuration failure"), Operation->ConfigurationError.Contains(TEXT("No passenger seats")));
+    TestFalse(TEXT("Invalid attended ride cannot reopen via motion telemetry"), Controller->bAutoDetectPhase);
+    TestEqual(TEXT("Invalid attended ride holds boarding closed"), Controller->RidePhase, ECarnivalRidePhase::Closed);
+    Operation->DestroyComponent();
+    TestTrue(TEXT("Removing attended operation restores phase detection"), Controller->bAutoDetectPhase);
     return true;
 }
 

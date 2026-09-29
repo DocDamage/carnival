@@ -2,6 +2,13 @@
 
 Audit: September 27, 2026. Baseline implementation commit: `be6dff0b`.
 
+Latest completion pass: [current implementation and acceptance evidence](COMPLETION_PASS_20260929.md).
+The newer pass verifies 28 native tests and both R11/R12 tunnel round trips,
+superseding their failures in the historical route/art entry below. Remaining
+world, ride, visual, performance and physical-controller acceptance stays open.
+
+September 29 route/art continuation: see [the latest evidence and remaining work](WorldExpansion/CONTINUATION_20260929.md). The Mansion–Hospital outer route and R09/R10 surface round trips now pass the refreshed PIE runner. R10 stairs and R11/R12 tunnels fail gameplay traversal; the earlier R11 static pass is superseded. Lab B frame-depth repair is saved, with lighting/sightlines still open. Historical acceptance limits below remain unless explicitly superseded by that record.
+
 The first-demo scope includes **the Carnival, coastal wetlands/railroad bridge, haunted mansion, industrial slums, and abandoned fully explorable hospital**, with seamless walking and motorcycle access. It also includes **every discussed project location and gameplay system**, every usable attendant-run Carnival ride, applicable player operator controls, a small lively midway that grows ominous, scripted doll scares without death or failure, full modern controller support, and the missing-worker/music-box story. DualSense is the first hardware test controller. On 2026-09-27, the user explicitly clarified that everything discussed is part of the first demo; earlier “deferred” labels below are superseded.
 
 The core story combines a missing carnival worker, an old music box, and unexplained lights/sounds. The proposed connection is that the worker disappeared while recovering the box from the mansion. The user selected finding the worker alive and frightened, then returning to the carnival with every ride still available. Decisions are recorded in `Docs/FIRST_DEMO_DESIGN.md`; the proposed controller layout and operation requirements are in `Docs/CONTROLLER_AND_RIDE_CONTROLS.md`. The 15–20 minute estimate applies only to the core story proposal; the overall first demo also includes all discussed worlds, gameplay systems, rides, and the slums/hospital branch, and has no measured total duration.

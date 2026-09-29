@@ -1,5 +1,5 @@
 """Exercise the integrated expansion routes with the project gameplay pawn in PIE."""
-import json, math, time, traceback
+import hashlib, json, math, os, time, traceback
 from pathlib import Path
 import unreal
 ROOT=Path(r"F:\Carnival")
@@ -29,12 +29,26 @@ def resample(source, spacing=650.0):
 outer_controls=REGION.get("outer_route_spine",{}).get("controls_cm") or CONNECTIONS["R03"]["route"].get("spine_controls_cm")
 outer=resample(catmull(outer_controls))
 lab=resample(catmull(CONNECTIONS["R09"]["route"]["controls_cm"]))
+service=resample(catmull(CONNECTIONS["R10"]["route"]["controls_cm"]))
+stair=CONNECTIONS["R10"]["stair"]
+stairs=[tuple(stair["start_cm"][k]*(1-i/stair["step_count"])+stair["end_cm"][k]*(i/stair["step_count"]) for k in range(3)) for i in range(stair["step_count"]+1)]
 CASES=[("lab_branch_prison_to_lab",lab),
+       ("R10_surface",service), ("R10_stairs",stairs),
+       *[(cid+"_tunnel",resample([CONNECTIONS[cid]["route"]["start_cm"],CONNECTIONS[cid]["route"]["end_cm"]],150.)) for cid in ("R11","R12")],
        ("outer_surface_mansion_to_hospital",outer)]
-REPORT=OUT/"Walk_Route_Playtest.json"
-LIVE=OUT/"Walk_Route_Playtest_Live.json"
+selected=os.environ.get("CARNIVAL_EXPANSION_CASES","")
+if selected:
+    names=selected.split(",")
+    if set(names)-{name for name,_ in CASES}: raise ValueError("Unknown route case: "+selected)
+    CASES=[case for case in CASES if case[0] in names]
+prefix=os.environ.get("CARNIVAL_EXPANSION_REPORT","Walk_Route_Playtest")
+time_dilation=float(os.environ.get('CARNIVAL_ROUTE_TIME_DILATION','1'))
+if not 1. <= time_dilation <= 4.: raise ValueError('Time dilation must be between 1 and 4')
+REPORT=OUT/(prefix+".json")
+LIVE=OUT/(prefix+"_Live.json")
 le=unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
-report={"success":False,"map":MAIN,"movement":"CarnivalPlayerCharacter add_movement_input in rendered PIE","time_dilation":1.0,"tests":[],"errors":[],"route_lengths_m":{name:sum(math.dist(a,b) for a,b in zip(path,path[1:]))/100. for name,path in CASES},"excluded_editor_only_spawners":[]}
+report={"success":False,"map":MAIN,"movement":"CarnivalPlayerCharacter add_movement_input in PIE; rendering depends on launch mode; no physical input","time_dilation":1.0,"tests":[],"errors":[],"route_lengths_m":{name:sum(math.dist(a,b) for a,b in zip(path,path[1:]))/100. for name,path in CASES},"excluded_editor_only_spawners":[],"started_epoch":time.time(),"region_authoring_sha256":hashlib.sha256((OUT/"Region_Authoring.json").read_bytes()).hexdigest()}
+report['time_dilation']=time_dilation
 state={"phase":"startup","busy":False,"deadline":time.monotonic()+300,"setup_polls":0,"callback_count":0,"last_heartbeat":0.0,"last_wall_progress":None,"last_motion_position":None}
 def save():
     heartbeat={"callback_count":state.get("callback_count",0),"last_tick_epoch":state.get("last_tick_epoch"),"last_game_time_seconds":state.get("last_game_time_seconds"),"world_paused":state.get("world_paused"),"player_position_cm":state.get("last_player_position_cm"),"player_velocity_cm_s":state.get("last_player_velocity_cm_s")}
@@ -58,7 +72,26 @@ def start_leg(reverse=False, teleport=False):
     state.update(phase=label,reverse=reverse,route=[unreal.Vector(*x) for x in vals],index=1,last_index=0,last_progress=now,start=now,deadline=time.monotonic()+900,last_wall_progress=time.monotonic(),last_motion_position=pos)
     report["tests"].append({"name":label,"success":False,"start_cm":vals[0],"end_cm":vals[-1],"samples":[]}); save()
 def finish(error=None):
-    if error: report["errors"].append(error)
+    if error:
+        if state.get('player') and state.get('route'):
+            player=state['player']; pos=player.get_actor_location()
+            target=state['route'][min(state.get('index',0),len(state['route'])-1)]
+            direction=unreal.Vector(target.x-pos.x,target.y-pos.y,0).normal()
+            hit=unreal.SystemLibrary.capsule_trace_single(state['game'],pos,pos+direction*150,
+                42,90,unreal.TraceTypeQuery.ECC_VISIBILITY,False,[player],unreal.DrawDebugTrace.NONE,True)
+            data=hit.to_tuple() if hit else None
+            if data and data[0]:
+                report.setdefault('failure_blockers',[]).append({'phase':state['phase'],
+                    'actor':data[9].get_path_name() if data[9] else None,
+                    'impact':data[5].to_tuple(),'normal':data[7].to_tuple()})
+        report["errors"].append(state["phase"]+": "+error)
+        if report["tests"]:
+            report["tests"][-1]["error"]=error
+            report["tests"][-1]["failure_position_cm"]=state.get("last_player_position_cm")
+        if state.get("case_index",len(CASES)) < len(CASES)-1:
+            state["case_index"]+=1
+            start_leg(False,True)
+            return
     report["finish_reason"]=error or ("Configured route set completed" if report.get("success") else "Stopped without a success flag")
     report["finish_epoch"]=time.time()
     unreal.log("WORLD_EXPANSION_ROUTE_FINISH "+str(report["finish_reason"]))
@@ -100,7 +133,7 @@ def tick(delta):
             state["world_paused"]=bool(unreal.GameplayStatics.is_game_paused(game))
             unreal.SystemLibrary.execute_console_command(game,"t.IdleWhenNotForeground 0")
             report["background_tick_cvar_set"]="t.IdleWhenNotForeground 0"
-            unreal.GameplayStatics.set_global_time_dilation(game,1.0)
+            unreal.GameplayStatics.set_global_time_dilation(game,time_dilation)
             start_leg(False,True); return
         if unreal.GameplayStatics.is_game_paused(game):
             report["unpause_result"]=bool(unreal.GameplayStatics.set_game_paused(game,False))
@@ -122,10 +155,13 @@ def tick(delta):
             current["samples"].append({"index":state["index"],"position_cm":pos.to_tuple(),"seconds":round(now-state["start"],2),"velocity_cm_s":player.get_velocity().to_tuple()})
             current["last_sample_seconds"]=now; save()
         if state["index"]==len(route)-1 and dist(pos,route[-1])<170:
+            current['end_height_error_cm']=pos.z-(route[-1].z+116.)
+            if abs(current['end_height_error_cm'])>80.:
+                finish('Reached endpoint XY on the wrong floor height'); return
             current.update(success=True,seconds=round(now-state["start"],2),finish_cm=pos.to_tuple())
             if not state["reverse"]: start_leg(True,False)
             elif state["case_index"]<len(CASES)-1: state["case_index"]+=1; start_leg(False,True)
-            else: report["success"]=True; finish()
+            else: report["success"]=not report["errors"] and all(item["success"] for item in report["tests"]); finish()
             return
         ti=state["index"]
         while ti<len(route)-1 and dist(pos,route[ti])<180: ti+=1

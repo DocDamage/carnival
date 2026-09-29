@@ -13,6 +13,12 @@ enum class ECarnivalOperationState : uint8
     Closed, Loading, Securing, Running, Returning, Unloading
 };
 
+UENUM(BlueprintType)
+enum class ECarnivalRideExperience : uint8
+{
+    SeatedRide, Walkthrough, Show, DrivingArena
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FCarnivalOperationChanged, ECarnivalOperationState, State);
 
 /** Owns a complete attended cycle while using the vendor ride's start/stop commands. */
@@ -25,6 +31,8 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Ride")
     TObjectPtr<AActor> Attendant;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Ride")
+    ECarnivalRideExperience Experience = ECarnivalRideExperience::SeatedRide;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Ride")
     FName StartFunction = TEXT("StartRide");
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Ride")
@@ -43,6 +51,9 @@ public:
     float InteractionDistance = 350.f;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Ride")
     bool bAllowPlayerOperation = true;
+    // Vendor components that move the ride outside actor/timeline/rotator ticks.
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Ride")
+    TArray<FName> AdditionalMotionComponentNames;
 
     UPROPERTY(BlueprintReadOnly, Category="Ride")
     ECarnivalOperationState State = ECarnivalOperationState::Closed;
@@ -74,9 +85,11 @@ public:
     UFUNCTION(BlueprintPure, Category="Ride")
     bool IsInInteractionRange(AActor* Player) const;
     UFUNCTION(BlueprintPure, Category="Ride")
-    bool IsReady() const { return bInitialized && ConfigurationError.IsEmpty(); }
+    bool IsReady() const;
     UFUNCTION(BlueprintCallable, Category="Ride|Inspection")
     static TArray<FString> DescribeRideControls(AActor* Ride);
+    UFUNCTION(BlueprintCallable, Category="Ride|Inspection")
+    static TArray<FString> DescribeRideProperties(AActor* Ride);
 
 protected:
     virtual void BeginPlay() override;
@@ -91,9 +104,16 @@ private:
         FTransform ReturnStart;
     };
     TArray<FMotionPose> MotionPoses;
+    struct FMotionTick
+    {
+        TWeakObjectPtr<UActorComponent> Component;
+        bool bWasEnabled = false;
+    };
+    TArray<FMotionTick> MotionTicks;
     UPROPERTY(Transient)
     TObjectPtr<UCarnivalRideControllerComponent> Controller;
     bool bInitialized = false;
+    bool bControllerClaimed = false;
     bool bPriorAutoDetect = true;
     bool bActorTickWasEnabled = false;
     float StateSeconds = 0.f;
@@ -101,5 +121,5 @@ private:
     void ChangeState(ECarnivalOperationState Next);
     void BeginReturn();
     void FreezeMotion();
-    void RestorePassengers();
+    void RestorePassengers(bool bForceForTeardown = false);
 };

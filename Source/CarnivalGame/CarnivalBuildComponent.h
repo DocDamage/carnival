@@ -59,6 +59,12 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Build|State")
 	FTransform CurrentHologramTransform;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Build|State")
+	bool bCanPlacePiece = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Build|State")
+	FString PlacementFeedback;
+
 	/* API */
 	UFUNCTION(BlueprintCallable, Category = "Build")
 	void ToggleBuildMode();
@@ -95,4 +101,3 @@ protected:
 	UPROPERTY()
 	TArray<AActor*> PlacedBuildingActors;
 };
-

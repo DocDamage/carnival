@@ -16,7 +16,8 @@ PREFIX = "WorldExpansion_WallArt_LabB_"
 # and -1075 on the north side of Lab B. The room is on the -Y side of the
 # panels. Portrait frames face local +Y, so yaw 180 turns them into the room.
 # The smaller photo frames face local +X, so yaw -90 turns them into the room.
-# The panel's room-side face is at about Y=1447 cm. Target values refer to
+# The panel pivot does not identify its visible face; derive the mounting
+# plane from its actual transformed bounds below. Target values refer to
 # visible mesh bounds rather than actor pivots; several pack meshes use an
 # edge pivot, which otherwise leaves inconsistent gaps between frames.
 PORTRAITS = [
@@ -77,6 +78,16 @@ try:
             actor_subsystem.destroy_actor(actor)
 
     for spec in PLACEMENTS:
+        faces=[]
+        for wall in actor_subsystem.get_all_level_actors():
+            wall_comp=wall.get_component_by_class(unreal.StaticMeshComponent)
+            wall_mesh=wall_comp.get_editor_property('static_mesh') if wall_comp else None
+            if not wall_mesh or 'mwall' not in wall_mesh.get_name().lower(): continue
+            wc,we=wall.get_actor_bounds(False,True)
+            if we.y<50 and wc.y>1400 and abs(spec['target_bounds_center_x_cm']-wc.x)<=we.x:
+                faces.append(wc.y-we.y)
+        if not faces: raise RuntimeError('No wall panel for '+spec['label'])
+        spec['wall_face_y_cm']=min(faces)-.5
         mesh = unreal.load_asset(spec["asset"])
         if not mesh:
             raise RuntimeError("Could not load mesh " + spec["asset"])
@@ -105,6 +116,7 @@ try:
         if not component:
             raise RuntimeError("No StaticMeshComponent on " + spec["label"])
         component.set_static_mesh(mesh)
+        component.set_collision_profile_name('NoCollision')
         component.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
         component.set_cast_shadow(True)
 

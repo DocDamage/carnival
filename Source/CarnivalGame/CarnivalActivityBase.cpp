@@ -54,6 +54,10 @@ void ACarnivalActivityBase::BeginPlay()
 
 	FString DisplayStr = FString::Printf(TEXT("[E] START: %s\n%s"), *ActivityName, *Description);
 	PromptText->SetText(FText::FromString(DisplayStr));
+	for (ACarnivalTargetActor* Target : Targets)
+	{
+		if (IsValid(Target)) Target->OwningActivity = this;
+	}
 }
 
 void ACarnivalActivityBase::Tick(float DeltaTime)
@@ -62,15 +66,20 @@ void ACarnivalActivityBase::Tick(float DeltaTime)
 
 	if (ActivityState == ECarnivalActivityState::Active)
 	{
-		ElapsedTime += DeltaTime;
-		TimeRemaining -= DeltaTime;
+		if (!IsValid(ActivePlayer))
+		{
+			AbortActivity();
+			return;
+		}
+		ElapsedTime += FMath::Max(0.f, DeltaTime);
+		TimeRemaining = FMath::Max(0.f, TimeLimit - ElapsedTime);
 
 		if (Checkpoints.Num() > 0)
 		{
 			CheckPlayerCheckpoints();
 		}
 
-		if (TimeRemaining <= 0.0f)
+		if (ActivityState == ECarnivalActivityState::Active && TimeRemaining <= 0.0f)
 		{
 			CompleteActivity(false);
 		}
@@ -81,32 +90,38 @@ void ACarnivalActivityBase::OnTriggerOverlapBegin(UPrimitiveComponent* Overlappe
 {
 	if (ACarnivalPlayerCharacter* Player = Cast<ACarnivalPlayerCharacter>(OtherActor))
 	{
+		if (!Player->IsPlayerControlled()) return;
 		bPlayerInTrigger = true;
-		ActivePlayer = Player;
+		Player->NearbyActivity = this;
 	}
 }
 
 void ACarnivalActivityBase::OnTriggerOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-	if (OtherActor == ActivePlayer)
+	if (ACarnivalPlayerCharacter* Player = Cast<ACarnivalPlayerCharacter>(OtherActor))
 	{
-		bPlayerInTrigger = false;
+		if (Player->NearbyActivity == this) Player->NearbyActivity = nullptr;
+		if (Player->IsPlayerControlled()) bPlayerInTrigger = false;
 	}
 }
 
 void ACarnivalActivityBase::StartActivity(ACarnivalPlayerCharacter* Player)
 {
-	if (!Player)
+	if (!IsValid(Player) || ActivityState == ECarnivalActivityState::Active
+		|| (IsValid(Player->ActiveActivity) && Player->ActiveActivity != this
+			&& Player->ActiveActivity->ActivityState == ECarnivalActivityState::Active))
 	{
 		return;
 	}
 
 	ActivePlayer = Player;
+	Player->ActiveActivity = this;
 	ActivityState = ECarnivalActivityState::Active;
 	ElapsedTime = 0.0f;
 	TimeRemaining = TimeLimit;
 	CurrentScore = 0;
 	CurrentCheckpointIndex = 0;
+	ScoredTargets.Reset();
 
 	for (FCarnivalActivityCheckpoint& Cp : Checkpoints)
 	{
@@ -115,8 +130,9 @@ void ACarnivalActivityBase::StartActivity(ACarnivalPlayerCharacter* Player)
 
 	for (ACarnivalTargetActor* Target : Targets)
 	{
-		if (Target)
+		if (IsValid(Target))
 		{
+			Target->OwningActivity = this;
 			Target->ResetTarget();
 		}
 	}
@@ -140,7 +156,8 @@ void ACarnivalActivityBase::CheckPlayerCheckpoints()
 
 void ACarnivalActivityBase::OnCheckpointReached(int32 CheckpointIndex)
 {
-	if (Checkpoints.IsValidIndex(CheckpointIndex))
+	if (ActivityState == ECarnivalActivityState::Active && CheckpointIndex == CurrentCheckpointIndex
+		&& Checkpoints.IsValidIndex(CheckpointIndex) && !Checkpoints[CheckpointIndex].bReached)
 	{
 		Checkpoints[CheckpointIndex].bReached = true;
 		CurrentScore += 100;
@@ -155,18 +172,20 @@ void ACarnivalActivityBase::OnCheckpointReached(int32 CheckpointIndex)
 
 void ACarnivalActivityBase::OnTargetHit(ACarnivalTargetActor* Target)
 {
-	if (!Target)
+	if (ActivityState != ECarnivalActivityState::Active || !IsValid(Target)
+		|| !Targets.Contains(Target) || !Target->bIsHit || ScoredTargets.Contains(Target))
 	{
 		return;
 	}
 
-	CurrentScore += Target->PointValue;
+	ScoredTargets.Add(Target);
+	CurrentScore += FMath::Max(0, Target->PointValue);
 
 	// Check if all targets are hit
 	bool bAllHit = true;
 	for (ACarnivalTargetActor* T : Targets)
 	{
-		if (T && !T->bIsHit)
+		if (IsValid(T) && !ScoredTargets.Contains(T))
 		{
 			bAllHit = false;
 			break;
@@ -181,6 +200,7 @@ void ACarnivalActivityBase::OnTargetHit(ACarnivalTargetActor* Target)
 
 void ACarnivalActivityBase::CompleteActivity(bool bSuccess)
 {
+	if (ActivityState != ECarnivalActivityState::Active) return;
 	ActivityState = bSuccess ? ECarnivalActivityState::Completed : ECarnivalActivityState::Failed;
 }
 
@@ -192,6 +212,9 @@ void ACarnivalActivityBase::AbortActivity()
 
 void ACarnivalActivityBase::ResetActivity()
 {
+	if (IsValid(ActivePlayer) && ActivePlayer->ActiveActivity == this) ActivePlayer->ActiveActivity = nullptr;
+	ActivePlayer = nullptr;
+	ScoredTargets.Reset();
 	ActivityState = ECarnivalActivityState::Inactive;
 	ElapsedTime = 0.0f;
 	TimeRemaining = TimeLimit;
@@ -205,7 +228,7 @@ void ACarnivalActivityBase::ResetActivity()
 
 	for (ACarnivalTargetActor* Target : Targets)
 	{
-		if (Target)
+		if (IsValid(Target))
 		{
 			Target->ResetTarget();
 		}
@@ -236,6 +259,7 @@ FString ACarnivalActivityBase::GetCurrentObjectiveText() const
 
 FString ACarnivalActivityBase::GetMedalRating() const
 {
+	if (ActivityState != ECarnivalActivityState::Completed) return TEXT("");
 	if (ElapsedTime <= GoldTime)
 	{
 		return TEXT("GOLD MEDAL");

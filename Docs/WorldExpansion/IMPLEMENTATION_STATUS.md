@@ -1,5 +1,7 @@
 # Carnival World Expansion — Implementation Status
 
+**Latest continuation:** [Route and wall-art findings, 2026-09-29](CONTINUATION_20260929.md) supersede the old one-sample traversal statement and unreviewed wall-placement assumptions below.
+
 Updated 2026-09-29. Active project: F:\Carnival\CarnivalGame.uproject. Engine: Unreal Engine 5.8.3. Main gameplay map: /Game/Creepwood_Carnival_Meshingun/Environment/Map/LV_Carnival.
 
 ## Authored region status

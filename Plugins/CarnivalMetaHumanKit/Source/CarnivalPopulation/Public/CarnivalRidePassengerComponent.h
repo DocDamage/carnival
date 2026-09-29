@@ -52,6 +52,11 @@ public:
     UFUNCTION(BlueprintCallable, Category="Carnival|Passenger")
     void UnboardRide(const FTransform& ExitTransform, bool bDetachKeepWorld = true);
 
+    /** Check the complete passenger capsule and, for walking passengers, floor support.
+     * Call before normal unloading; UnboardRide remains available for teardown recovery. */
+    UFUNCTION(BlueprintPure, Category="Carnival|Passenger")
+    bool CanUnboardAt(const FTransform& ExitTransform) const;
+
     UFUNCTION(BlueprintCallable, Category="Carnival|Passenger")
     void ApplyRideTelemetry(const FCarnivalRideTelemetry& Telemetry);
 

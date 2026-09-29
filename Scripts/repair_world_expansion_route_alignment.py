@@ -74,14 +74,17 @@ if not unreal.EditorLoadingAndSavingUtils.save_map(world,PACKAGE): raise Runtime
 # Each register row keeps the full continuous spline controls and identifies its own actual endpoint pair.
 endpoint_nodes=[
  ("Mansion",0,start),
- ("DocksNorth",4,tuple(controls[4])),
- ("Prison",8,tuple(controls[8])),
- ("DocksEast",15,tuple(controls[15])),
+ *[(name, next(i for i,p in enumerate(controls) if p[0]==xy[0] and p[1]==xy[1]),
+    next(tuple(p) for p in controls if p[0]==xy[0] and p[1]==xy[1]))
+   for name,xy in [('DocksNorth',(-55000.,-55000.)),('Prison',(-30000.,-25000.)),('DocksEast',(70000.,18000.))]],
  ("Hospital",len(controls)-1,tuple(controls[-1])),
 ]
 edge_rows=[]
+control_offsets=[0]
+for a,b in zip(controls,controls[1:]):
+    control_offsets.append(control_offsets[-1]+max(2,int(math.ceil(math.dist(a,b)/700.0))))
 for cid,(a_name,a_i,a_pos),(b_name,b_i,b_pos) in zip(("R03","R04","R05","R06"),endpoint_nodes,endpoint_nodes[1:]):
-    section=points[max(0,int((a_i/(len(controls)-1))*(len(points)-1))):min(len(points),int((b_i/(len(controls)-1))*(len(points)-1))+1)]
+    section=points[control_offsets[a_i]:control_offsets[b_i]+1]
     segment_length=sum(math.dist(x,y) for x,y in zip(section,section[1:]))/100.0
     edge_rows.append({"id":cid,"from":a_name,"to":b_name,"type":"surface","route":{
         "name":"OuterRoute","spine_controls_cm":[list(p) for p in controls],"control_range_inclusive":[a_i,b_i],

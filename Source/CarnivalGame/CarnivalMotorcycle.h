@@ -178,6 +178,7 @@ protected:
 
 	void UpdateArcadePhysics(float DeltaTime);
 	void UpdateChaosPhysics(float DeltaTime);
+	FVector PreviousPhysicsLocation = FVector::ZeroVector;
 	bool GetMountApproachTransform(bool bMountLeft, FVector& OutLocation, FRotator& OutRotation) const;
 	bool IsMountApproachClear(ACarnivalPlayerCharacter* Rider, FVector ApproachLocation, FRotator ApproachRotation) const;
 	bool AlignRiderForMount(ACarnivalPlayerCharacter* Rider, bool bMountLeft) const;

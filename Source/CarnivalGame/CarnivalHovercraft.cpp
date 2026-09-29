@@ -8,6 +8,9 @@
 #include "NiagaraComponent.h"
 #include "CarnivalPlayerCharacter.h"
 #include "CarnivalPlayerController.h"
+#include "CarnivalVehicleExit.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "TimerManager.h"
 
 ACarnivalHovercraft::ACarnivalHovercraft()
 {
@@ -51,6 +54,9 @@ ACarnivalHovercraft::ACarnivalHovercraft()
 void ACarnivalHovercraft::BeginPlay()
 {
 	Super::BeginPlay();
+	CameraBoom->bUsePawnControlRotation = true;
+	CameraBoom->bInheritPitch = true;
+	CameraBoom->bInheritYaw = true;
 	CurrentHoverHeight = TargetHoverHeight;
 }
 
@@ -83,7 +89,7 @@ void ACarnivalHovercraft::UpdateHoverPhysics(float DeltaTime)
 	}
 
 	float TotalHitZ = 0.0f;
-	FVector AvgNormal = FVector::UpVector;
+	FVector AvgNormal = FVector::ZeroVector;
 	int32 HitCount = 0;
 
 	for (int32 i = 0; i < 4; ++i)
@@ -106,6 +112,13 @@ void ACarnivalHovercraft::UpdateHoverPhysics(float DeltaTime)
 		float AvgGroundZ = TotalHitZ / (float)HitCount;
 		AvgNormal.Normalize();
 		TargetZ = AvgGroundZ + TargetHoverHeight;
+		FallVelocity = 0.f;
+	}
+	else
+	{
+		AvgNormal = FVector::UpVector;
+		FallVelocity += GetWorld()->GetGravityZ() * DeltaTime;
+		TargetZ += FallVelocity * DeltaTime;
 	}
 
 	// 2. Speed & Propulsion
@@ -138,15 +151,21 @@ void ACarnivalHovercraft::UpdateHoverPhysics(float DeltaTime)
 	// 5. Translation & Position Integration
 	FVector MoveDelta = (Forward * CurrentForwardSpeed * DeltaTime) + (Right * CurrentStrafeSpeed * DeltaTime);
 	FVector NewLocation = GetActorLocation() + MoveDelta;
-	NewLocation.Z = FMath::FInterpTo(GetActorLocation().Z, TargetZ, DeltaTime, 7.0f);
+	NewLocation.Z = HitCount > 0 ? FMath::FInterpTo(GetActorLocation().Z, TargetZ, DeltaTime, 7.0f) : TargetZ;
 
 	FHitResult SweepHit;
 	SetActorLocationAndRotation(NewLocation, NewRotation, true, &SweepHit);
+	if (SweepHit.bBlockingHit)
+	{
+		CurrentForwardSpeed = CurrentStrafeSpeed = 0.f;
+		FallVelocity = 0.f;
+	}
 }
 
 void ACarnivalHovercraft::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
+	if (Cast<ACarnivalPlayerController>(GetController())) return;
 
 	PlayerInputComponent->BindAxis(TEXT("MoveForward"), this, &ACarnivalHovercraft::InputThrottle);
 	PlayerInputComponent->BindAxis(TEXT("MoveRight"), this, &ACarnivalHovercraft::InputSteering);
@@ -155,17 +174,17 @@ void ACarnivalHovercraft::SetupPlayerInputComponent(UInputComponent* PlayerInput
 
 void ACarnivalHovercraft::InputThrottle(float Value)
 {
-	ThrottleInput = Value;
+	ThrottleInput = FMath::Clamp(Value, -1.f, 1.f);
 }
 
 void ACarnivalHovercraft::InputSteering(float Value)
 {
-	SteeringInput = Value;
+	SteeringInput = FMath::Clamp(Value, -1.f, 1.f);
 }
 
 void ACarnivalHovercraft::InputStrafe(float Value)
 {
-	StrafeInput = Value;
+	StrafeInput = FMath::Clamp(Value, -1.f, 1.f);
 }
 
 void ACarnivalHovercraft::InputBoost(bool bEnable)
@@ -175,21 +194,28 @@ void ACarnivalHovercraft::InputBoost(bool bEnable)
 
 bool ACarnivalHovercraft::CanMount(AActor* PotentialRider) const
 {
-	if (CurrentRider != nullptr || PotentialRider == nullptr)
+	const ACarnivalPlayerCharacter* Player = Cast<ACarnivalPlayerCharacter>(PotentialRider);
+	if (CurrentRider != nullptr || !IsValid(Player) || !Player->GetController()
+		|| Player->MountedMotorcycle || Player->MountedBoat || Player->MountedHovercraft
+		|| Player->IsUsingRide() || FMath::Abs(CurrentForwardSpeed) > 50.f || FMath::Abs(CurrentStrafeSpeed) > 50.f)
 	{
 		return false;
 	}
 
-	return MountTrigger->IsOverlappingActor(PotentialRider);
+	return MountTrigger->IsOverlappingActor(PotentialRider)
+		&& CarnivalVehicleExit::CanReachSeat(this, Player, DriverRelativeOffset);
 }
 
 void ACarnivalHovercraft::Mount(ACarnivalPlayerCharacter* Rider)
 {
-	if (!Rider || CurrentRider)
+	if (!CanMount(Rider))
 	{
 		return;
 	}
 
+	BoardingTransform = Rider->GetActorTransform();
+	BoardingController = Rider->GetController();
+	ClearControlInputs();
 	CurrentRider = Rider;
 
 	// Notify character
@@ -205,22 +231,54 @@ void ACarnivalHovercraft::Mount(ACarnivalPlayerCharacter* Rider)
 
 void ACarnivalHovercraft::Dismount()
 {
-	if (!CurrentRider)
-	{
-		return;
-	}
-
-	ACarnivalPlayerCharacter* Rider = CurrentRider;
-	CurrentRider = nullptr;
-
-	// Unpossess hovercraft and return control to rider
-	AController* CraftController = GetController();
-	if (CraftController)
-	{
-		CraftController->Possess(Rider);
-	}
-
-	// Notify character to dismount
-	Rider->OnDismountHovercraft();
+	if (FMath::Abs(CurrentForwardSpeed) <= 50.f && FMath::Abs(CurrentStrafeSpeed) <= 50.f) RestoreRider(false);
 }
 
+void ACarnivalHovercraft::ClearControlInputs()
+{
+	ThrottleInput = SteeringInput = StrafeInput = 0.f;
+	bIsBoosting = false;
+}
+
+void ACarnivalHovercraft::UnPossessed()
+{
+	ClearControlInputs();
+	Super::UnPossessed();
+	if (CurrentRider && GetWorld()) GetWorld()->GetTimerManager().SetTimerForNextTick(
+		FTimerDelegate::CreateUObject(this, &ACarnivalHovercraft::RecoverLostPossession));
+}
+
+void ACarnivalHovercraft::RecoverLostPossession()
+{
+	if (!GetController() && CurrentRider) RestoreRider(true);
+}
+
+void ACarnivalHovercraft::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (EndPlayReason == EEndPlayReason::Destroyed) RestoreRider(true);
+	Super::EndPlay(EndPlayReason);
+}
+
+void ACarnivalHovercraft::RestoreRider(bool bEmergency)
+{
+	if (!IsValid(CurrentRider)) { CurrentRider = nullptr; return; }
+	FVector Exit;
+	if (!CarnivalVehicleExit::FindGroundExit(this, CurrentRider, CollisionBox->GetScaledBoxExtent(), Exit))
+	{
+		if (!bEmergency) return;
+		Exit = BoardingTransform.GetLocation();
+		FRotator Rotation = BoardingTransform.Rotator();
+		GetWorld()->FindTeleportSpot(CurrentRider, Exit, Rotation);
+	}
+	ACarnivalPlayerCharacter* Rider = CurrentRider;
+	AController* FormerController = BoardingController.Get();
+	CurrentRider = nullptr;
+	ClearControlInputs();
+	CurrentForwardSpeed = CurrentStrafeSpeed = 0.f;
+	Rider->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+	Rider->SetActorLocationAndRotation(Exit, FRotator(0, GetActorRotation().Yaw, 0), false, nullptr, ETeleportType::TeleportPhysics);
+	Rider->OnDismountHovercraft();
+	Rider->GetCharacterMovement()->StopMovementImmediately();
+	if (FormerController && (!FormerController->GetPawn() || FormerController->GetPawn() == this)) FormerController->Possess(Rider);
+	BoardingController.Reset();
+}

@@ -23,6 +23,8 @@ public:
 
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+	virtual void UnPossessed() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UBoxComponent* CollisionBox;
@@ -67,6 +69,23 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Boat|Water")
 	bool bAutoDetectWater = true;
+
+	/** Explicit surveyed world-space region. Disabled for legacy placements. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Boat|Water|Boundary")
+	bool bUseNavigableWaterBounds = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Boat|Water|Boundary", meta = (EditCondition = "bUseNavigableWaterBounds"))
+	FVector2D NavigableWaterMin = FVector2D::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Boat|Water|Boundary", meta = (EditCondition = "bUseNavigableWaterBounds"))
+	FVector2D NavigableWaterMax = FVector2D::ZeroVector;
+
+	/** Reject solid ground above the bottom of the hull plus this clearance. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Boat|Water|Boundary", meta = (ClampMin = "0", EditCondition = "bUseNavigableWaterBounds"))
+	float MinimumKeelClearance = 25.f;
+
+	UFUNCTION(BlueprintPure, Category = "Boat|Water")
+	bool IsWaterTransformNavigable(FVector Location, FRotator Rotation) const;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Boat|Water")
 	float WaveBobAmplitude = 12.0f;
@@ -113,10 +132,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Boat|Input")
 	void InputBrake(float Value);
 
+	UFUNCTION(BlueprintCallable, Category = "Boat|Input")
+	void ClearControlInputs();
+
 protected:
 	virtual void BeginPlay() override;
 
 	void UpdateWaterPhysics(float DeltaTime);
+	void RestoreRider(bool bEmergency);
+	void RecoverLostPossession();
+	FTransform BoardingTransform;
+	TWeakObjectPtr<AController> BoardingController;
 
 	float ThrottleInput = 0.0f;
 	float SteeringInput = 0.0f;
@@ -124,4 +150,3 @@ protected:
 	float WaveTime = 0.0f;
 	float TargetWaterZ = 0.0f;
 };
-

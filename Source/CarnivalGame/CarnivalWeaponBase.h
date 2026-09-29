@@ -45,6 +45,15 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
 	float FireRate;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon", meta = (ClampMin = "0"))
+	float MeleeSweepRadius = 25.f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon|Feedback")
+	TObjectPtr<AActor> LastHitActor;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon|Feedback")
+	float LastDamageDealt = 0.f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Effects")
 	USoundBase* AttackSound;
 
@@ -62,5 +71,6 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
-};
 
+	double NextAttackTime = 0.0;
+};

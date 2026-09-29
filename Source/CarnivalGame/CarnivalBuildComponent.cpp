@@ -7,6 +7,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/StaticMesh.h"
 
 UCarnivalBuildComponent::UCarnivalBuildComponent()
 {
@@ -31,11 +32,13 @@ void UCarnivalBuildComponent::BeginPlay()
 		HologramComponent = NewObject<UStaticMeshComponent>(Owner, TEXT("BuildHologramPreview"));
 		if (HologramComponent)
 		{
+			HologramComponent->SetMobility(EComponentMobility::Movable);
 			HologramComponent->RegisterComponent();
 			HologramComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			HologramComponent->SetVisibility(false);
 		}
 	}
+	if (bIsBuildModeActive) UpdateHologram();
 }
 
 void UCarnivalBuildComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -73,7 +76,7 @@ void UCarnivalBuildComponent::CyclePiece(int32 Step)
 		const TArray<UStaticMesh*>& Pieces = Categories[CurrentCategoryIndex].Pieces;
 		if (Pieces.Num() > 0)
 		{
-			CurrentPieceIndex = (CurrentPieceIndex + Step + Pieces.Num()) % Pieces.Num();
+			CurrentPieceIndex = ((CurrentPieceIndex + Step) % Pieces.Num() + Pieces.Num()) % Pieces.Num();
 			if (HologramComponent)
 			{
 				HologramComponent->SetStaticMesh(Pieces[CurrentPieceIndex]);
@@ -86,15 +89,12 @@ void UCarnivalBuildComponent::CycleCategory(int32 Step)
 {
 	if (Categories.Num() > 0)
 	{
-		CurrentCategoryIndex = (CurrentCategoryIndex + Step + Categories.Num()) % Categories.Num();
+		CurrentCategoryIndex = ((CurrentCategoryIndex + Step) % Categories.Num() + Categories.Num()) % Categories.Num();
 		CurrentPieceIndex = 0;
 		if (HologramComponent)
 		{
 			UStaticMesh* Mesh = GetCurrentPieceMesh();
-			if (Mesh)
-			{
-				HologramComponent->SetStaticMesh(Mesh);
-			}
+			HologramComponent->SetStaticMesh(Mesh);
 		}
 	}
 }
@@ -128,9 +128,19 @@ FString UCarnivalBuildComponent::GetCurrentCategoryName() const
 
 void UCarnivalBuildComponent::UpdateHologram()
 {
+	bCanPlacePiece = false;
+	PlacementFeedback = TEXT("Aim at clear, level ground");
 	AActor* Owner = GetOwner();
 	if (!Owner || !HologramComponent)
 	{
+		return;
+	}
+	UStaticMesh* Mesh = GetCurrentPieceMesh();
+	HologramComponent->SetStaticMesh(Mesh);
+	HologramComponent->SetVisibility(bIsBuildModeActive && Mesh != nullptr);
+	if (!Mesh)
+	{
+		PlacementFeedback = TEXT("No building piece selected");
 		return;
 	}
 
@@ -151,24 +161,35 @@ void UCarnivalBuildComponent::UpdateHologram()
 	FCollisionQueryParams Params;
 	Params.AddIgnoredActor(Owner);
 
-	FVector TargetLocation = TraceEnd;
-	if (GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, Params))
-	{
-		TargetLocation = Hit.ImpactPoint;
-	}
+	if (!GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, Params)
+		|| Hit.ImpactNormal.Z < .7f) return;
+	FVector TargetLocation = Hit.ImpactPoint;
 
 	// Snap to grid
 	if (GridSnapSize > 0.0f)
 	{
 		TargetLocation.X = FMath::GridSnap(TargetLocation.X, GridSnapSize);
 		TargetLocation.Y = FMath::GridSnap(TargetLocation.Y, GridSnapSize);
-		TargetLocation.Z = FMath::GridSnap(TargetLocation.Z, 50.0f); // 50cm vertical snap
 	}
+	// Recheck support after XY snapping so a preview cannot straddle a cliff at the old height.
+	FHitResult Support;
+	if (!GetWorld()->LineTraceSingleByChannel(Support, TargetLocation + FVector(0, 0, 100),
+		TargetLocation - FVector(0, 0, 150), ECC_Visibility, Params) || Support.ImpactNormal.Z < .7f) return;
+	const FBox Bounds = Mesh->GetBoundingBox();
+	TargetLocation.Z = Support.ImpactPoint.Z - Bounds.Min.Z + 2.f;
 
 	FRotator TargetRotation(0.0f, CurrentYawRotation, 0.0f);
 	CurrentHologramTransform = FTransform(TargetRotation, TargetLocation, FVector(1.0f));
 
 	HologramComponent->SetWorldTransform(CurrentHologramTransform);
+	const FVector Center = CurrentHologramTransform.TransformPosition(Bounds.GetCenter());
+	const FVector Extent = (Bounds.GetExtent() - FVector(1.f)).ComponentMax(FVector(1.f));
+	FCollisionQueryParams ClearanceParams(SCENE_QUERY_STAT(CarnivalBuildClearance), false);
+	// Include the player capsule: building must never trap its owner inside a newly placed piece.
+	bCanPlacePiece = FVector::DistSquared(Owner->GetActorLocation(), Center) <= FMath::Square(MaxBuildDistance)
+		&& !GetWorld()->OverlapBlockingTestByProfile(Center, TargetRotation.Quaternion(), TEXT("BlockAll"),
+			FCollisionShape::MakeBox(Extent), ClearanceParams);
+	PlacementFeedback = bCanPlacePiece ? TEXT("Ready to place") : TEXT("Space is blocked or out of reach");
 }
 
 bool UCarnivalBuildComponent::PlacePiece()
@@ -177,6 +198,8 @@ bool UCarnivalBuildComponent::PlacePiece()
 	{
 		return false;
 	}
+	UpdateHologram();
+	if (!bCanPlacePiece) return false;
 
 	UStaticMesh* MeshToSpawn = GetCurrentPieceMesh();
 	if (!MeshToSpawn)
@@ -195,8 +218,8 @@ bool UCarnivalBuildComponent::PlacePiece()
 
 	if (PlacedActor && PlacedActor->GetStaticMeshComponent())
 	{
-		PlacedActor->GetStaticMeshComponent()->SetStaticMesh(MeshToSpawn);
 		PlacedActor->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
+		PlacedActor->GetStaticMeshComponent()->SetStaticMesh(MeshToSpawn);
 		PlacedActor->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("BlockAll"));
 		PlacedBuildingActors.Add(PlacedActor);
 		return true;
@@ -233,8 +256,7 @@ bool UCarnivalBuildComponent::DemolishPiece()
 	FCollisionQueryParams Params;
 	Params.AddIgnoredActor(Owner);
 
-	if (GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldDynamic, Params) ||
-		GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, Params))
+	if (GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, Params))
 	{
 		AActor* HitActor = Hit.GetActor();
 		if (HitActor && PlacedBuildingActors.Contains(HitActor))
@@ -247,4 +269,3 @@ bool UCarnivalBuildComponent::DemolishPiece()
 
 	return false;
 }
-
