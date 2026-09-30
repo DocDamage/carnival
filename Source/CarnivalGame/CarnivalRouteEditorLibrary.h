@@ -7,6 +7,7 @@
 class USkeletalMesh;
 class UPhysicsAsset;
 class UMaterial;
+class UBlueprint;
 
 /** Local authoring helpers; no changes are performed during gameplay. */
 UCLASS()
@@ -14,6 +15,14 @@ class CARNIVALGAME_API UCarnivalRouteEditorLibrary : public UBlueprintFunctionLi
 {
     GENERATED_BODY()
 public:
+    /** Read-only provenance for a constructed ride's seat components and SCS. */
+    UFUNCTION(BlueprintCallable, Category="Carnival|Editor", meta=(DevelopmentOnly))
+    static TArray<FString> DescribeRideSeatConstruction(AActor* Ride);
+
+    /** Remove one measured legacy SCS duplicate from a project Ferris Blueprint. */
+    UFUNCTION(BlueprintCallable, Category="Carnival|Editor", meta=(DevelopmentOnly))
+    static int32 RepairDuplicateFerrisSeatBlueprint(UBlueprint* Blueprint);
+
     /** Paint a visibility hole in a bounded world XY rectangle of a copied landscape. */
     UFUNCTION(BlueprintCallable, Category="Carnival|Editor")
     static bool CutLandscapeOpening(AActor* LandscapeActor, FVector WorldMinimum, FVector WorldMaximum, FTransform LevelTransform);

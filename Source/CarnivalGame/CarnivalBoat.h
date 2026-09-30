@@ -96,7 +96,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Boat|Seating")
 	FName DriverSeatSocketName = TEXT("DriverSeat");
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Boat|Seating")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Boat|Seating")
 	FVector DriverRelativeOffset = FVector(-30.0f, 0.0f, 40.0f);
 
 	/* Runtime State */

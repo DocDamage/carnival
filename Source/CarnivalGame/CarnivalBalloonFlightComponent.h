@@ -29,6 +29,8 @@ public:
     float BasketHalfWidth = 250.f;
     UPROPERTY(BlueprintReadOnly, Category="Balloon")
     bool bLastCycleObstructed = false;
+    UPROPERTY(Transient, BlueprintReadOnly, Category="Balloon|Clearance")
+    FString LastObstruction;
     UPROPERTY(BlueprintReadOnly, Category="Balloon")
     float CurrentLift = 0.f;
     UPROPERTY(BlueprintReadOnly, Category="Balloon")
@@ -55,7 +57,7 @@ private:
     bool bHasLoadingPose = false;
     bool bWasRunning = false;
     bool ResolveComponents();
-    bool IsFlightStepClear(const FTransform& Target) const;
+    bool IsFlightStepClear(const FTransform& Target);
     void StopVendorMotion() const;
     void RequestControlledReturn();
 };

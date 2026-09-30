@@ -6,6 +6,7 @@ input is injected. Optional rendered captures use CARNIVAL_RIDE_CAPTURE=1.
 Changes to durations, fixtures and crowd spawners are unsaved PIE/test changes.
 """
 import json
+import hashlib
 import os
 import time
 import traceback
@@ -13,18 +14,33 @@ from pathlib import Path
 import unreal
 
 ROOT = Path(unreal.Paths.project_dir())
-OUT = ROOT/'Saved/RideDevelopment/AllRidePIE'
-OUT.mkdir(parents=True, exist_ok=True)
 MAP = '/Game/Creepwood_Carnival_Meshingun/Environment/Map/LV_Carnival'
 SELECTED = set(filter(None, os.environ.get('CARNIVAL_RIDE_FAMILIES','').split(',')))
+SELECTED_ACTORS=set(filter(None,os.environ.get('CARNIVAL_RIDE_ACTORS','').split(',')))
 CAPTURE = os.environ.get('CARNIVAL_RIDE_CAPTURE') == '1'
+LIGHTING = os.environ.get('CARNIVAL_RIDE_LIGHTING','')
+LIGHTING_LEVELS={'day':'Lv_LightingDay','night':'Lv_LightingNight','snow':'Lv_LightingNightSnow'}
+if LIGHTING and LIGHTING not in LIGHTING_LEVELS: raise ValueError('Unknown ride lighting variant')
+REPORT_NAME=os.environ.get('CARNIVAL_RIDE_REPORT','AllRidePIE_'+LIGHTING if LIGHTING else 'AllRidePIE')
+if not REPORT_NAME.replace('_','').isalnum(): raise ValueError('Unsafe ride report name')
+OUT = ROOT/'Saved/RideDevelopment'/REPORT_NAME
+OUT.mkdir(parents=True, exist_ok=True)
 AUTHORING_PATH = ROOT/'Saved/RideDevelopment/All_Attended_Authoring.json'
 AUTHORED = json.loads(AUTHORING_PATH.read_text()).get('rides', []) if AUTHORING_PATH.exists() else []
 LE = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
 S = {'phase':'startup','busy':False,'deadline':time.monotonic()+300,'index':0}
 REPORT = {'started':time.time(),'map':MAP,'tests':[],'errors':[],
           'physical_input':False,'rendered':CAPTURE,'mass_spawners_excluded':[],
+          'dedicated_harness_families':{'BumperCars':'Scripts/playtest_bumper_arena.py'},
+          'lighting_variant':LIGHTING or 'authored_default',
+          'selected_ride_actors':sorted(SELECTED_ACTORS),
           'coverage':'Authored attendants only; consult Placed_Ride_Inventory for unstaffed attractions'}
+station_report=ROOT/'Saved/RideDevelopment/Balloon_Stations.json'
+BALLOON_STATIONS=[]
+if station_report.exists():
+    REPORT['balloon_stations_sha256']=hashlib.sha256(station_report.read_bytes()).hexdigest()
+    station_data=json.loads(station_report.read_text())
+    if station_data.get('success'): BALLOON_STATIONS=station_data['stations']
 
 def save():
     REPORT['phase']=S['phase']
@@ -64,8 +80,40 @@ def tick(_):
         if S['phase']=='startup':
             player=unreal.GameplayStatics.get_player_pawn(game,0)
             if not isinstance(player,unreal.CarnivalPlayerCharacter): return
+            if LIGHTING and not S.get('lighting_requested'):
+                REPORT['lighting_streaming_requests']=[]
+                for key,name in LIGHTING_LEVELS.items():
+                    level=unreal.GameplayStatics.get_streaming_level(game,unreal.Name(name))
+                    if not level: raise RuntimeError('Missing lighting streaming level '+name)
+                    enabled=key==LIGHTING
+                    # UE exposes BlueprintSetter functions as Python properties.
+                    level.should_be_visible=enabled
+                    level.should_be_loaded=enabled
+                    REPORT['lighting_streaming_requests'].append({'level':name,'loaded_visible':enabled})
+                S.update(lighting_requested=True,lighting_settle=time.monotonic()+3)
+                save(); return
+            if LIGHTING and time.monotonic()<S['lighting_settle']: return
             staff=list(unreal.GameplayStatics.get_all_actors_of_class(game,unreal.CarnivalRideAttendant))
+            staff=[a for a in staff if str(a.get_editor_property('ride_name')) != 'BumperCars']
+            if LIGHTING:
+                staff=[a for a in staff if a.get_level().get_path_name().split('.')[0].rsplit('/',1)[-1].removeprefix('UEDPIE_0_')==LIGHTING_LEVELS[LIGHTING]]
+                if not staff: return # Requested streamed actors may still be initializing.
             if SELECTED: staff=[a for a in staff if str(a.get_editor_property('ride_name')) in SELECTED]
+            if SELECTED_ACTORS:
+                staff=[a for a in staff if a.ride and a.ride.get_name() in SELECTED_ACTORS]
+                found={a.ride.get_name() for a in staff}
+                if found!=SELECTED_ACTORS: raise RuntimeError('Missing selected ride actors: '+str(sorted(SELECTED_ACTORS-found)))
+            if LIGHTING:
+                expected=sum(not SELECTED or name in SELECTED for name in ('FerrisWheel','Carousel'))
+                if not expected: raise RuntimeError('Selected families do not exist in lighting variants')
+                if len(staff)<expected: return
+                if len(staff)!=expected: raise RuntimeError('Unexpected lighting variant attendant count')
+            # Actors can appear before their first production tick. Give
+            # BeginPlay/first-tick operation initialization time to run.
+            if 'staff_ready_time' not in S:
+                S['staff_ready_time']=time.monotonic()+2
+                return
+            if time.monotonic()<S['staff_ready_time']: return
             staff.sort(key=lambda a:a.get_name())
             REPORT['attendant_count']=len(staff)
             if not staff: REPORT['errors'].append('No authored attendants loaded'); finish(); return
@@ -75,10 +123,17 @@ def tick(_):
             staff=S['staff'][S['index']]; ride=staff.get_editor_property('ride')
             operation=staff.get_editor_property('operation')
             row={'attendant':staff.get_name(),'ride':ride.get_name() if ride else None,
+                 'ride_path':ride.get_path_name() if ride else None,
+                 'ride_location_cm':list(ride.get_actor_location().to_tuple()) if ride else None,
+                 'attendant_level':staff.get_level().get_path_name(),
                  'family':str(staff.get_editor_property('ride_name')),'checks':[]}
             REPORT['tests'].append(row)
             if not check('Operation ready',operation and operation.is_ready(),
                          error=str(operation.get_editor_property('configuration_error')) if operation else 'missing'):
+                row['seat_configuration']=[{'component':seat.get_name(),'seat_id':str(seat.seat_id),
+                    'parent':seat.get_attach_parent().get_name() if seat.get_attach_parent() else None}
+                    for seat in ride.get_components_by_class(unreal.CarnivalRideSeatComponent)] if ride else []
+                save()
                 next_ride(); return
             row['authored_timing']={key:float(getattr(operation,key)) for key in
                 ('boarding_seconds','securing_seconds','cycle_seconds','return_seconds','unloading_seconds')}
@@ -92,6 +147,13 @@ def tick(_):
             entry=(unreal.Vector(*authored['placement']['approach']) if authored else
                    staff.get_actor_location()+outward.normal()*180)+unreal.Vector(0,0,6)
             row['approach_source']='saved_authoring_clearance_check' if authored else 'mesh_bounds_direction_fallback'
+            station=next((r for r in BALLOON_STATIONS if r.get('ride','').rsplit('.',1)[-1]==ride.get_name()),None)
+            if station:
+                if unreal.Vector.distance(ride.get_actor_location(),unreal.Vector(*station['actor_pivot_cm']))>1:
+                    raise RuntimeError('Saved balloon station position is stale for '+ride.get_name())
+                half_height=player.get_component_by_class(unreal.CapsuleComponent).get_scaled_capsule_half_height()
+                entry=unreal.Vector(*station['approach_ground_cm'])+unreal.Vector(0,0,half_height+3)
+                row['approach_source']='saved_grounded_balloon_public_approach'
             row['requested_entry']=list(entry.to_tuple())
             player.set_actor_location(entry,False,True)
             row['teleport_succeeded']=unreal.Vector.distance(player.get_actor_location(),entry)<1
@@ -167,11 +229,30 @@ def tick(_):
             if not check('Player takes operator control',operation.take_operator_control(player)):
                 next_ride(); return
             check('Operator starts cycle',operation.operator_start(player))
+            REPORT['tests'][-1]['operator_samples']=[]
             S.update(phase='operator',until=now+float(operation.securing_seconds)+1)
             return
         if S['phase']=='operator':
+            samples=REPORT['tests'][-1]['operator_samples']
+            if not samples or now-samples[-1]['game_seconds']>.25:
+                samples.append({'game_seconds':now,'position_cm':list(player.get_actor_location().to_tuple()),
+                    'state':str(operation.get_editor_property('state')),
+                    'in_range':operation.is_in_interaction_range(player),
+                    'operator_matches':operation.get_editor_property('player_operator')==player,
+                    'movement_mode':str(player.get_movement_component().get_editor_property('movement_mode'))})
+                save()
             if now<S['until']: return
-            check('Operator stop requests return',operation.operator_stop(player))
+            check('Operator stop requests return',operation.operator_stop(player),
+                in_range=operation.is_in_interaction_range(player),
+                operator_matches=operation.get_editor_property('player_operator')==player,
+                position_cm=list(player.get_actor_location().to_tuple()),
+                operation_state=str(operation.get_editor_property('state')))
+            flight=S['ride'].get_component_by_class(unreal.CarnivalBalloonFlightComponent)
+            if flight:
+                REPORT['tests'][-1]['operator_flight_clearance']={
+                    'obstructed':bool(flight.last_cycle_obstructed),
+                    'obstruction':str(flight.last_obstruction),
+                    'current_lift_cm':float(flight.current_lift)}
             operation.release_operator_control(player)
             check('Handover releases player ownership',not operation.get_editor_property('player_operator'))
             S.update(phase='handback')

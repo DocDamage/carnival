@@ -2,6 +2,7 @@
 #include "CarnivalBumperCar.h"
 #include "CarnivalPlayerCharacter.h"
 #include "CarnivalRideOperationComponent.h"
+#include "Components/StaticMeshComponent.h"
 
 bool UCarnivalBumperArenaComponent::InitializeArena()
 {
@@ -10,6 +11,23 @@ bool UCarnivalBumperArenaComponent::InitializeArena()
     {
         if (!IsValid(Car) || (Car->Arena && Car->Arena != this)) return false;
         Car->Arena = this;
+    }
+    // Vendor construction/BeginPlay can restore collision on the retired display
+    // cars. Only authoring's explicit replacement list is eligible for removal.
+    TArray<UStaticMeshComponent*> Meshes;
+    GetOwner()->GetComponents(Meshes);
+    for (const FName Name : ReplacedDisplayCarComponents)
+    {
+        UStaticMeshComponent* const* Found = Meshes.FindByPredicate(
+            [Name](const UStaticMeshComponent* Mesh) { return Mesh->GetFName() == Name; });
+        if (!Found) return false;
+    }
+    for (UStaticMeshComponent* Mesh : Meshes)
+    {
+        if (!ReplacedDisplayCarComponents.Contains(Mesh->GetFName())) continue;
+        Mesh->SetVisibility(false, true);
+        Mesh->SetHiddenInGame(true, true);
+        Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     }
     return true;
 }

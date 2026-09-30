@@ -117,10 +117,11 @@ bool FCarnivalBalloonFlightTest::RunTest(const FString&)
     TestTrue(TEXT("Natural unload restores collision"),Player->GetActorEnableCollision());
 
     const double RoofZ=Home.TransformPosition(FVector(0,0,Mesh->GetStaticMesh()->GetBoundingBox().Max.Z)).Z;
-    MakeBlock(FVector(0,0,RoofZ+600),FVector(2000,2000,20));
+    AActor* Roof = MakeBlock(FVector(0,0,RoofZ+600),FVector(2000,2000,20));
     TestTrue(TEXT("Second boarding starts obstructed-flight fixture"),Operation->RequestBoard(Player));
     for (int32 I=0; I<120 && !Flight->bLastCycleObstructed; ++I) Step(1.f/60.f);
     TestTrue(TEXT("Flight detects overhead obstruction"),Flight->bLastCycleObstructed);
+    TestTrue(TEXT("Obstruction identifies the actual roof actor"),Flight->LastObstruction.Contains(Roof->GetPathName()));
     TestEqual(TEXT("Obstruction requests controlled platform return"),Operation->State,ECarnivalOperationState::Returning);
     TestTrue(TEXT("Passenger stays attached until return is complete"),Player->RidePassenger->IsRiding());
     TestTrue(TEXT("Balloon stops below obstruction"),Flight->CurrentLift<600.f);
@@ -131,6 +132,17 @@ bool FCarnivalBalloonFlightTest::RunTest(const FString&)
     TestTrue(TEXT("Blocked flight restores player collision"),Player->GetActorEnableCollision());
     TestTrue(TEXT("Blocked flight retains player controller"),PC->GetPawn()==Player);
     TestEqual(TEXT("Original movement mode is restored"),Player->GetCharacterMovement()->MovementMode.GetValue(),MOVE_Flying);
+    Roof->Destroy();
+    TestTrue(TEXT("Unloaded visitor can take balloon operator control"),Operation->TakeOperatorControl(Player));
+    TestTrue(TEXT("Operator restarts after removed obstruction"),Operation->OperatorStart(Player));
+    Step(.4f);
+    TestEqual(TEXT("Clear operator flight reaches running"),Operation->State,ECarnivalOperationState::Running);
+    TestFalse(TEXT("New clear flight resets obstruction flag"),Flight->bLastCycleObstructed);
+    TestTrue(TEXT("New clear flight resets obstruction detail"),Flight->LastObstruction.IsEmpty());
+    TestTrue(TEXT("Operator can request the clear flight's return"),Operation->OperatorStop(Player));
+    Operation->ReleaseOperatorControl(Player);
+    Step(1.f);
+    TestEqual(TEXT("Staff resumes after clear operator handover"),Operation->State,ECarnivalOperationState::Loading);
     return true;
 }
 #endif

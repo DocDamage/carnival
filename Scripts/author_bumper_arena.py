@@ -189,6 +189,8 @@ try:
             REPORT['cars'].append({'source':component.get_name(),'car':car.get_path_name(),'mesh':mesh.get_path_name(),
                                    'location':list(location.to_tuple()),'hull_half_extent_cm':[hull_x,hull_y,35]})
     assert cars, 'No visible source cars lie on the measured arena platform'
+    arena.replaced_display_car_components = [unreal.Name(component.get_name()) for component in source_cars]
+    REPORT['replaced_display_car_components'] = [component.get_name() for component in source_cars]
     for component in source_cars:
         component.set_visibility(False, True)
         component.set_hidden_in_game(True, True)

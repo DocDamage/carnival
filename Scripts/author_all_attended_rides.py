@@ -65,7 +65,8 @@ def family(actor):
                           ('teapot', 'Teapot'), ('flyingbobs', 'FlyingBobs'),
                           ('balloontower', 'BalloonTower'), ('clown', 'ClownRide'),
                           ('hotairballoon', 'HotAirBalloon'), ('circus_', 'Circus'),
-                          ('hauntedhouse', 'HauntedHouse'), ('bumpercars', 'BumperCars')]:
+                          ('hauntedhouse', 'HauntedHouse'), ('bumpercars', 'BumperCars'),
+                          ('bumperarena', 'BumperCars')]:
         if token in name: return result
     return None
 
@@ -224,7 +225,13 @@ for original_path, label, ride_id in targets:
     row = {'original_path': original_path, 'family': ride_id, 'label': label}
     REPORT['rides'].append(row)
     if ride_id == 'BumperCars':
-        row['blocker'] = 'Dedicated player driving and arena lifecycle required'
+        actor = next(a for a in ACTORS.get_all_level_actors() if a.get_path_name() == original_path)
+        arena = actor.get_component_by_class(unreal.CarnivalBumperArenaComponent)
+        row['dedicated_authoring_report'] = str(OUT/'BumperArena_Authoring.json')
+        row['dedicated_runtime_report'] = str(OUT/'BumperArenaPIE/index.json')
+        row['car_count'] = len([car for car in arena.cars if car]) if arena else 0
+        if not row['car_count']:
+            row['blocker'] = 'Dedicated player driving and arena lifecycle required'
         continue
     try:
         actor = next((a for a in ACTORS.get_all_level_actors() if a.get_path_name() == original_path), None)
@@ -236,6 +243,16 @@ for original_path, label, ride_id in targets:
         actor = next(a for a in ACTORS.get_all_level_actors() if a.get_path_name() == original_path)
         if actor.get_class() != bp.generated_class():
             original_location = actor.get_actor_location()
+            original_root = actor.get_editor_property('root_component')
+            original_has_root = bool(original_root)
+            # Hidden levels leave ComponentToWorld at identity. An unattached
+            # root's serialized relative transform retains the saved placement.
+            if original_root and not original_root.get_attach_parent():
+                original_location = original_root.get_relative_transform().translation
+            previous_candidates = {candidate.get_path_name() for candidate in unreal.ObjectIterator(unreal.Actor)
+                                   if candidate.get_class() == bp.generated_class()}
+            row['conversion_source_has_root'] = original_has_root
+            row['conversion_source_location'] = list(original_location.to_tuple())
             converted = ACTORS.convert_actors([actor], bp.generated_class(), '/Game/Carnival/Rides/Converted')
             # UE's ConvertActors returns selected actors, not the actual
             # conversion result. Hidden lighting levels cannot select their
@@ -247,7 +264,9 @@ for original_path, label, ride_id in targets:
                     and candidate.get_level()
                     and candidate.get_level().get_path_name().split('.')[0] == level_path
                     and candidate.get_actor_label() == label
-                    and (candidate.get_actor_location()-original_location).length() < .1]
+                    and candidate.get_path_name() not in previous_candidates
+                    # With no root, identity is not a placement measurement.
+                    and (not original_has_root or (candidate.get_actor_location()-original_location).length() < .1)]
             if len(converted) != 1:
                 row['conversion_candidates']=[{'path':candidate.get_path_name(),
                     'label':candidate.get_actor_label(),'location':list(candidate.get_actor_location().to_tuple()),

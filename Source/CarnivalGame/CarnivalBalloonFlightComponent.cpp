@@ -132,7 +132,7 @@ void UCarnivalBalloonFlightComponent::StopVendorMotion() const
         if (Timeline->GetFName() == VendorMotionTimelineName) Timeline->Stop();
 }
 
-bool UCarnivalBalloonFlightComponent::IsFlightStepClear(const FTransform& Target) const
+bool UCarnivalBalloonFlightComponent::IsFlightStepClear(const FTransform& Target)
 {
     const FBox Bounds = MotionSource->GetStaticMesh()->GetBoundingBox();
     const float Split = FMath::Clamp(CanopyStartZ, static_cast<float>(Bounds.Min.Z + 1), static_cast<float>(Bounds.Max.Z - 1));
@@ -152,7 +152,13 @@ bool UCarnivalBalloonFlightComponent::IsFlightStepClear(const FTransform& Target
         FHitResult Hit;
         if (GetWorld()->SweepSingleByObjectType(Hit, Current.TransformPosition(Section.GetCenter()),
             Target.TransformPosition(Section.GetCenter()), Target.GetRotation(), Objects,
-            FCollisionShape::MakeBox(Section.GetExtent() * Target.GetScale3D().GetAbs()), Params)) return false;
+            FCollisionShape::MakeBox(Section.GetExtent() * Target.GetScale3D().GetAbs()), Params))
+        {
+            LastObstruction = FString::Printf(TEXT("%s / %s at %s (initial overlap=%d)"),
+                *GetPathNameSafe(Hit.GetActor()), *GetPathNameSafe(Hit.GetComponent()),
+                *Hit.ImpactPoint.ToString(), Hit.bStartPenetrating);
+            return false;
+        }
     }
     return true;
 }
@@ -194,6 +200,7 @@ void UCarnivalBalloonFlightComponent::TickComponent(float DeltaTime, ELevelTick 
     {
         FlightSeconds = 0.f;
         bLastCycleObstructed = false;
+        LastObstruction.Reset();
         bWasRunning = true;
     }
     if (bLastCycleObstructed) return;

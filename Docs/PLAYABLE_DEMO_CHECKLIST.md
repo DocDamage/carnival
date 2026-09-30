@@ -3,9 +3,13 @@
 Audit: September 27, 2026. Baseline implementation commit: `be6dff0b`.
 
 Latest completion pass: [current implementation and acceptance evidence](COMPLETION_PASS_20260929.md).
-The newer pass verifies 28 native tests and both R11/R12 tunnel round trips,
-superseding their failures in the historical route/art entry below. Remaining
-world, ride, visual, performance and physical-controller acceptance stays open.
+The newer pass verifies 34 native tests, sampled lifecycle checks across all 25
+ride instances, boat/hovercraft round trips, Atlantis and the full lower R10
+landing-to-R11 sewer handoff with continuous walking return and camera checks.
+Six settings/remapping views also pass readability review. These results
+supersede the corresponding historical failures below. Complete world, crowd,
+roster/seat fitting, visual/audio, packaged performance and physical-controller
+acceptance remains open.
 
 September 29 route/art continuation: see [the latest evidence and remaining work](WorldExpansion/CONTINUATION_20260929.md). The Mansion–Hospital outer route and R09/R10 surface round trips now pass the refreshed PIE runner. R10 stairs and R11/R12 tunnels fail gameplay traversal; the earlier R11 static pass is superseded. Lab B frame-depth repair is saved, with lighting/sightlines still open. Historical acceptance limits below remain unless explicitly superseded by that record.
 

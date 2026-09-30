@@ -5,6 +5,7 @@
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "Components/BoxComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "CarnivalBumperArenaComponent.h"
 #include "CarnivalBumperCar.h"
 #include "CarnivalPlayerCharacter.h"
@@ -42,6 +43,13 @@ bool FCarnivalBumperDrivingTest::RunTest(const FString&)
     Ride->AddInstanceComponent(Arena); Arena->RegisterComponent(); Arena->HalfExtent = FVector2D(700, 700);
     auto* Car = World->SpawnActor<ACarnivalBumperCar>(FVector(0, 0, 36), FRotator::ZeroRotator);
     Arena->Cars.Add(Car);
+    auto* DisplayCar = NewObject<UStaticMeshComponent>(Ride, TEXT("ReplacedDisplayCar"));
+    Ride->AddInstanceComponent(DisplayCar); DisplayCar->RegisterComponent();
+    DisplayCar->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+    auto* Platform = NewObject<UStaticMeshComponent>(Ride, TEXT("ArenaPlatform"));
+    Ride->AddInstanceComponent(Platform); Platform->RegisterComponent();
+    Platform->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+    Arena->ReplacedDisplayCarComponents.Add(DisplayCar->GetFName());
     auto* Operation = NewObject<UCarnivalRideOperationComponent>(Ride);
     Ride->AddInstanceComponent(Operation);
     Operation->Experience = ECarnivalRideExperience::DrivingArena;
@@ -53,6 +61,10 @@ bool FCarnivalBumperDrivingTest::RunTest(const FString&)
     Operation->CycleSeconds = 30.f;
     Operation->RegisterComponent();
     TestTrue(TEXT("Driving arena initializes without vendor start functions or fixed seats"), Operation->InitializeOperation());
+    TestTrue(TEXT("Retired display collision restored by Blueprint is removed on initialization"),
+        DisplayCar->GetCollisionEnabled() == ECollisionEnabled::NoCollision && DisplayCar->bHiddenInGame && !DisplayCar->IsVisible());
+    TestTrue(TEXT("Replacement cleanup preserves platform collision and visibility"),
+        Platform->GetCollisionEnabled() == ECollisionEnabled::QueryAndPhysics && Platform->IsVisible());
     auto* Player = World->SpawnActor<ACarnivalPlayerCharacter>(FVector(-300, 0, 98), FRotator::ZeroRotator);
     auto* Controller = World->SpawnActor<APlayerController>(); Controller->Possess(Player);
     auto Tick = [&] { ++GFrameCounter; World->Tick(LEVELTICK_All, 1.f/60.f); };

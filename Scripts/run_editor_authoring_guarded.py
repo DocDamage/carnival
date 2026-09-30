@@ -9,10 +9,10 @@ import unreal
 
 root=Path(unreal.Paths.project_dir()).resolve()
 target=(root/'Scripts'/os.environ['CARNIVAL_EDITOR_SCRIPT']).resolve()
-if target.parent != root/'Scripts' or target.suffix!='.py':
-    raise ValueError('Expected a Python file directly inside project Scripts')
 report={'script':str(target),'success':False}
 try:
+    if target.parent != root/'Scripts' or target.suffix!='.py':
+        raise ValueError('Expected a Python file directly inside project Scripts')
     namespace={'__name__':'__main__','__file__':str(target)}
     exec(compile(target.read_text(encoding='utf-8'),str(target),'exec'),namespace)
     outcome=namespace.get('REPORT',namespace.get('report'))

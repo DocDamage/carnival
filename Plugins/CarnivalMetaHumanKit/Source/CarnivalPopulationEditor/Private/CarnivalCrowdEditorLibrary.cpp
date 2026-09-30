@@ -10,6 +10,17 @@
 #include "MassEntitySpawnDataGeneratorBase.h"
 #include "MassEntityZoneGraphSpawnPointsGenerator.h"
 #include "MassSpawner.h"
+#include "MassEntitySubsystem.h"
+#include "MassEntityManager.h"
+#include "MassEntityQuery.h"
+#include "MassExecutionContext.h"
+#include "MassCommonFragments.h"
+#include "MassCrowdFragments.h"
+#include "MassLODFragments.h"
+#include "MassLODSubsystem.h"
+#include "MassRepresentationFragments.h"
+#include "MassSimulationSubsystem.h"
+#include "Misc/OutputDevice.h"
 #include "MassSpawnerTypes.h"
 #include "MassVisualizationTrait.h"
 #include "Mass/MetaHumanMassCrowdVisualizationTrait.h"
@@ -45,6 +56,104 @@
 #include "HAL/PlatformApplicationMisc.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
+
+TArray<FString> UCarnivalCrowdEditorLibrary::DescribeLiveMassSimulation(UWorld* World)
+{
+    TArray<FString> Result;
+    if (!World)
+    {
+        Result.Add(TEXT("Error: no world"));
+        return Result;
+    }
+    const UMassSimulationSubsystem* Simulation = World->GetSubsystem<UMassSimulationSubsystem>();
+    Result.Add(FString::Printf(TEXT("SimulationPresent=%d SimulationStarted=%d"),
+        Simulation != nullptr, Simulation && Simulation->IsSimulationStarted()));
+    Result.Add(FString::Printf(TEXT("BuiltZoneGraphLanes=%d"), CountBuiltZoneGraphLanes(World)));
+    Result.Add(FString::Printf(TEXT("WorldNetMode=%d"), static_cast<int32>(World->GetNetMode())));
+    for (TActorIterator<AMassSpawner> It(World); It; ++It)
+    {
+        // Same public scale inputs as AMassSpawner::GetSpawnCount (protected).
+        const float DensityScale = UE::MassSpawner::ScalabilitySpawnDensityMultiplier;
+        const int32 EffectiveCount = static_cast<int32>(It->GetSpawningCountScale() * DensityScale * It->GetCount());
+        Result.Add(FString::Printf(TEXT("Spawner=%s EffectiveSpawnCount=%d DensityScale=%.3f"),
+            *It->GetPathName(), EffectiveCount, DensityScale));
+    }
+    UMassEntitySubsystem* Entities = World->GetSubsystem<UMassEntitySubsystem>();
+    if (!Entities)
+    {
+        Result.Add(TEXT("Error: no entity subsystem"));
+        return Result;
+    }
+    FMassEntityManager& Manager = Entities->GetMutableEntityManager();
+    FMassEntityQuery CrowdQuery(Manager.AsShared());
+    CrowdQuery.AddTagRequirement<FMassCrowdTag>(EMassFragmentPresence::All);
+    CrowdQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+    Result.Add(FString::Printf(TEXT("CrowdEntitiesWithTransforms=%d"), CrowdQuery.GetNumMatchingEntities()));
+    FMassEntityQuery TransformQuery(Manager.AsShared());
+    TransformQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+    Result.Add(FString::Printf(TEXT("AllEntitiesWithTransforms=%d"), TransformQuery.GetNumMatchingEntities()));
+    if (const UMassLODSubsystem* LODSubsystem = World->GetSubsystem<UMassLODSubsystem>())
+    {
+        Result.Add(FString::Printf(TEXT("LODViewerCount=%d"), LODSubsystem->GetViewers().Num()));
+        for (const FViewerInfo& Viewer : LODSubsystem->GetViewers())
+        {
+            Result.Add(FString::Printf(TEXT("LODViewer Enabled=%d Location=%s Actor=%s"),
+                Viewer.bEnabled, *Viewer.Location.ToString(),
+                Viewer.ActorViewer ? *Viewer.ActorViewer->GetPathName() : TEXT("None")));
+        }
+    }
+    FMassEntityQuery RepresentationQuery(Manager.AsShared());
+    RepresentationQuery.AddTagRequirement<FMassCrowdTag>(EMassFragmentPresence::All);
+    RepresentationQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+    RepresentationQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
+    RepresentationQuery.AddRequirement<FMassRepresentationFragment>(EMassFragmentAccess::ReadOnly);
+    RepresentationQuery.AddRequirement<FMassViewerInfoFragment>(EMassFragmentAccess::ReadOnly);
+    FMassExecutionContext Context = Manager.CreateExecutionContext(0.0f);
+    Context.SetFlushDeferredCommands(false);
+    TMap<int32, int32> LODCounts;
+    TMap<int32, int32> RepresentationCounts;
+    float MinimumViewerDistanceSq = FLT_MAX;
+    int32 Samples = 0;
+    RepresentationQuery.ForEachEntityChunk(Context, [&](FMassExecutionContext& Chunk)
+    {
+        const auto Transforms = Chunk.GetFragmentView<FTransformFragment>();
+        const auto LODs = Chunk.GetFragmentView<FMassRepresentationLODFragment>();
+        const auto Representations = Chunk.GetFragmentView<FMassRepresentationFragment>();
+        const auto ViewerInfo = Chunk.GetFragmentView<FMassViewerInfoFragment>();
+        for (int32 Index = 0; Index < Chunk.GetNumEntities(); ++Index)
+        {
+            ++LODCounts.FindOrAdd(static_cast<int32>(LODs[Index].LOD));
+            ++RepresentationCounts.FindOrAdd(static_cast<int32>(Representations[Index].CurrentRepresentation));
+            MinimumViewerDistanceSq = FMath::Min(MinimumViewerDistanceSq, ViewerInfo[Index].ClosestViewerDistanceSq);
+            if (Samples++ < 8)
+            {
+                Result.Add(FString::Printf(TEXT("CrowdSample Location=%s LOD=%d Representation=%d ViewerDistanceSq=%.3g FrustumDistance=%.3g"),
+                    *Transforms[Index].GetTransform().GetLocation().ToString(), static_cast<int32>(LODs[Index].LOD),
+                    static_cast<int32>(Representations[Index].CurrentRepresentation),
+                    ViewerInfo[Index].ClosestViewerDistanceSq, ViewerInfo[Index].ClosestDistanceToFrustum));
+            }
+        }
+    });
+    Result.Add(FString::Printf(TEXT("CrowdRepresentationSamples=%d MinimumViewerDistanceSq=%.3g"), Samples, MinimumViewerDistanceSq));
+    for (const auto& Pair : LODCounts)
+    {
+        Result.Add(FString::Printf(TEXT("CrowdLOD=%d Count=%d"), Pair.Key, Pair.Value));
+    }
+    for (const auto& Pair : RepresentationCounts)
+    {
+        Result.Add(FString::Printf(TEXT("CrowdRepresentation=%d Count=%d"), Pair.Key, Pair.Value));
+    }
+#if WITH_MASSENTITY_DEBUG
+    Result.Add(FString::Printf(TEXT("RawDebugEntityCount=%d ArchetypeCount=%d"),
+        Manager.DebugGetEntityCount(), Manager.DebugGetArchetypesCount()));
+    FStringOutputDevice Details;
+    Manager.DebugGetArchetypesStringDetails(Details, false);
+    Result.Add(Details);
+#else
+    Result.Add(TEXT("Entity debug census unavailable in this build"));
+#endif
+    return Result;
+}
 
 namespace CarnivalCrowdEditorPrivate
 {

@@ -22,10 +22,20 @@ OUT=ROOT/'Saved/RideDevelopment'
 MAP='/Game/Creepwood_Carnival_Meshingun/Environment/Map/LV_Carnival'
 BP='/Game/Carnival/Rides/BP_HotAirBalloon_Carnival'
 SURVEY_ONLY=os.environ.get('CARNIVAL_BALLOON_SURVEY_ONLY')=='1'
+REPAIR_INDEX=os.environ.get('CARNIVAL_BALLOON_REPAIR_INDEX','')
+previous_stations=None
+if REPAIR_INDEX:
+    REPAIR_INDEX=int(REPAIR_INDEX)
+    previous=json.loads((OUT/'Balloon_Stations.json').read_text())
+    assert previous.get('success') and len(previous['stations'])==10
+    assert 0<=REPAIR_INDEX<10
+    previous_stations=previous['stations']
 FLIGHT_HEIGHT=1200.
 BACKUP=OUT/('BeforeBalloonStations_'+datetime.now().strftime('%Y%m%d_%H%M%S'))
 REPORT={'survey_only':SURVEY_ONLY,'backup':str(BACKUP),'stations':[],'rejections':{},'errors':[],
         'native_flight_height_cm':FLIGHT_HEIGHT,'player_walk_acceptance':'pending','rendered_acceptance':'pending'}
+REPORT['repair_index']=REPAIR_INDEX if previous_stations else None
+REPORT['flight_collision_objects']='WorldStatic, WorldDynamic and PhysicsBody, matching production flight sweeps'
 EAL=unreal.EditorAssetLibrary
 ACTORS=unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
 SDS=unreal.get_engine_subsystem(unreal.SubobjectDataSubsystem)
@@ -99,7 +109,7 @@ for actor in actors:
 assert seeds,'No grounded Carnival access seeds found'
 REPORT['access_seeds']=[{'actor':name,'foot_cm':list(point.to_tuple())} for name,point in seeds]
 
-def survey_route(start,finish):
+def survey_route(start,finish,destination_center):
     path_points=[start,finish]
     try:
         path=unreal.NavigationSystemV1.find_path_to_location_synchronously(world,start,finish)
@@ -115,6 +125,10 @@ def survey_route(start,finish):
             alpha=index/steps
             floor=ground(a.x+(b.x-a.x)*alpha,a.y+(b.y-a.y)*alpha)
             if not floor: return None
+            # The destination balloon is also ignored by the world trace, so
+            # explicitly exclude its future grounded basket footprint. A route
+            # from a west-side seed to the east queue must go around the basket.
+            if math.hypot(floor.x-destination_center[0],floor.y-destination_center[1])<425: return None
             # Previously planned baskets are still at their original sky poses
             # during survey. Account for their future ground footprint as well.
             if any(math.hypot(floor.x-c['center_cm'][0],floor.y-c['center_cm'][1])<425 for c in chosen): return None
@@ -130,9 +144,11 @@ def survey_route(start,finish):
 # tens of thousands of centimeters outside the actual Carnival attractions.
 candidates=[(x,y) for x in range(-15500,15501,750) for y in range(-11000,11001,750)]
 candidates.sort(key=lambda p:min(math.hypot(p[0]-s.x,p[1]-s.y) for _,s in seeds))
-chosen=[]
+chosen=[s for i,s in enumerate(previous_stations) if i!=REPAIR_INDEX] if previous_stations else []
 for x,y in candidates:
     if len(chosen)>=len(balloons): break
+    if previous_stations and [x,y]==previous_stations[REPAIR_INDEX]['center_cm'][:2]:
+        reject('previous_runtime_obstructed_site'); continue
     if any(math.hypot(x-c['center_cm'][0],y-c['center_cm'][1])<2500 for c in chosen): continue
     if any(math.hypot(x-p[0],y-p[1])<425 for c in chosen for p in c['walk_route_foot_cm']):
         reject('blocks_previously_planned_walk_route'); continue
@@ -149,8 +165,9 @@ for x,y in candidates:
     for local_center,half in ((unreal.Vector(0,0,(-667.43-350)/2),unreal.Vector(250,250,(667.43-350)/2)),
                               (unreal.Vector(1.63,32.36,(-350+1806.6)/2),unreal.Vector(958.3,963.2,(1806.6+350)/2))):
         start=unreal.Vector(x,y,pivot_z)+local_center
-        data=hit(unreal.SystemLibrary.box_trace_single(world,start,start+unreal.Vector(0,0,FLIGHT_HEIGHT),half,
-            unreal.Rotator(),unreal.TraceTypeQuery.ECC_VISIBILITY,False,ignored,unreal.DrawDebugTrace.NONE,True))
+        data=hit(unreal.SystemLibrary.box_trace_single_for_objects(world,start,start+unreal.Vector(0,0,FLIGHT_HEIGHT),half,
+            unreal.Rotator(),[unreal.ObjectTypeQuery.OBJECT_TYPE_QUERY1,unreal.ObjectTypeQuery.OBJECT_TYPE_QUERY2,
+                unreal.ObjectTypeQuery.OBJECT_TYPE_QUERY4],False,ignored,unreal.DrawDebugTrace.NONE,True))
         if data and data[0]: blocked=True; break
     if blocked: reject('flight_volume_blocked'); continue
     approach=floors[-1]
@@ -158,7 +175,7 @@ for x,y in candidates:
     route=None
     for seed_name,seed in nearest:
         if unreal.Vector.distance(seed,approach)>12000: continue
-        route=survey_route(seed,approach)
+        route=survey_route(seed,approach,(x,y))
         if route: break
     if not route: reject('no_clear_campus_walk_route'); continue
     chosen.append({'center_cm':[x,y,floor_z],'actor_pivot_cm':[x,y,pivot_z],
@@ -167,6 +184,10 @@ for x,y in candidates:
                    'flight_volume_clear':True})
     REPORT['surveyed_candidates']=len(chosen); save()
 
+if previous_stations and len(chosen)==len(balloons):
+    replacement=chosen[-1]
+    chosen=list(previous_stations)
+    chosen[REPAIR_INDEX]=replacement
 REPORT['stations']=chosen
 if len(chosen)<len(balloons):
     REPORT['errors'].append(f'Only {len(chosen)} of {len(balloons)} safe campus stations found; no assets or map changed')
@@ -205,6 +226,7 @@ else:
         actor.set_actor_scale3d(scale)
         return actor
     for index,(balloon,station) in enumerate(zip(balloons,chosen)):
+        if previous_stations and index!=REPAIR_INDEX: continue
         station['ride']=balloon.get_path_name()
         station['original_transform']=str(balloon.get_actor_transform())
         balloon.set_actor_scale3d(unreal.Vector(1,1,1))

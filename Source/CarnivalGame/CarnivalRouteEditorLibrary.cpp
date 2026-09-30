@@ -1,5 +1,8 @@
 #include "CarnivalRouteEditorLibrary.h"
 
+#include "CarnivalRideSeatComponent.h"
+#include "GameFramework/Actor.h"
+
 #if WITH_EDITOR
 #include "Landscape.h"
 #include "LandscapeInfo.h"
@@ -13,7 +16,105 @@
 #include "Materials/Material.h"
 #include "Materials/MaterialExpressionLandscapeVisibilityMask.h"
 #include "Materials/MaterialExpressionSetMaterialAttributes.h"
+#include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/SimpleConstructionScript.h"
+#include "Engine/SCS_Node.h"
+#include "Kismet2/BlueprintEditorUtils.h"
 #endif
+
+int32 UCarnivalRouteEditorLibrary::RepairDuplicateFerrisSeatBlueprint(UBlueprint* Blueprint)
+{
+#if WITH_EDITOR
+    if (!Blueprint || !Blueprint->GetPathName().StartsWith(TEXT("/Game/Carnival/Rides/Attended/BP_Attended_FerrisWheel_"))
+        || !Blueprint->SimpleConstructionScript) return -1;
+    USimpleConstructionScript* SCS=Blueprint->SimpleConstructionScript.Get();
+    USCS_Node* Legacy=nullptr;
+    int32 SeatCount=0;
+    for (USCS_Node* Node : SCS->GetAllNodes())
+    {
+        if (!Node || !Cast<UCarnivalRideSeatComponent>(Node->ComponentTemplate)) continue;
+        ++SeatCount;
+        if (Node->GetVariableName()==TEXT("CarnivalRideSeat"))
+        {
+            if (Legacy) return -1;
+            Legacy=Node;
+        }
+    }
+    if (!Legacy) return SeatCount==160 ? 0 : -1;
+    if (SeatCount!=161 || !Legacy->GetChildNodes().IsEmpty()) return -1;
+    const auto* Old=CastChecked<UCarnivalRideSeatComponent>(Legacy->ComponentTemplate);
+    if (Old->SeatId.IsNone()) return -1;
+    USCS_Node* Retained=nullptr;
+    for (USCS_Node* Node : SCS->GetAllNodes())
+    {
+        if (Node==Legacy || Node->GetVariableName()!=FName(*(TEXT("Seat_")+Old->SeatId.ToString()))) continue;
+        if (Retained) return -1;
+        Retained=Node;
+    }
+    const auto* Seat=Retained ? Cast<UCarnivalRideSeatComponent>(Retained->ComponentTemplate) : nullptr;
+    if (!Seat || Seat->SeatId!=Old->SeatId || !Seat->GetRelativeTransform().Equals(Old->GetRelativeTransform(),.001)
+        || !Seat->PassengerOffset.Equals(Old->PassengerOffset,.001) || Seat->bStandingPassenger!=Old->bStandingPassenger
+        || SCS->FindParentNode(Legacy)!=SCS->FindParentNode(Retained)
+        || Legacy->ParentComponentOrVariableName!=Retained->ParentComponentOrVariableName
+        || Legacy->ParentComponentOwnerClassName!=Retained->ParentComponentOwnerClassName
+        || Legacy->AttachToName!=Retained->AttachToName) return -1;
+    Blueprint->Modify(); SCS->Modify(); Legacy->Modify();
+    FBlueprintEditorUtils::RemoveVariableNodes(Blueprint,Legacy->GetVariableName());
+    // The duplicate can share a template with its calibrated node. Remove only
+    // the obsolete node; do not rename or destroy the retained template.
+    SCS->RemoveNode(Legacy);
+    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+    return 1;
+#else
+    return -1;
+#endif
+}
+
+TArray<FString> UCarnivalRouteEditorLibrary::DescribeRideSeatConstruction(AActor* Ride)
+{
+    TArray<FString> Result;
+#if WITH_EDITOR
+    if (!Ride) return Result;
+    TArray<UCarnivalRideSeatComponent*> Seats;
+    Ride->GetComponents(Seats);
+    for (const UCarnivalRideSeatComponent* Seat : Seats)
+    {
+        if (Seat->GetFName()!=TEXT("CarnivalRideSeat")) continue;
+        Result.Add(FString::Printf(TEXT("live %s method=%d id=%s archetype=%s instance=%d"),
+            *Seat->GetPathName(), int32(Seat->CreationMethod), *Seat->SeatId.ToString(),
+            *GetPathNameSafe(Seat->GetArchetype()), Ride->GetInstanceComponents().Contains(Seat)));
+    }
+    for (UClass* Class=Ride->GetClass(); Class; Class=Class->GetSuperClass())
+    {
+        auto* Generated=Cast<UBlueprintGeneratedClass>(Class);
+        if (!Generated || !Generated->SimpleConstructionScript) continue;
+        USimpleConstructionScript* SCS=Generated->SimpleConstructionScript.Get();
+        TSet<const USCS_Node*> Flat;
+        for (const USCS_Node* Node : SCS->GetAllNodes()) Flat.Add(Node);
+        TSet<const USCS_Node*> Tree;
+        TFunction<void(const USCS_Node*)> Visit=[&](const USCS_Node* Node)
+        {
+            if (!Node || Tree.Contains(Node)) return;
+            Tree.Add(Node);
+            for (const USCS_Node* Child : Node->GetChildNodes()) Visit(Child);
+        };
+        for (const USCS_Node* Root : SCS->GetRootNodes()) Visit(Root);
+        int32 FlatSeats=0, TreeSeats=0;
+        TSet<const USCS_Node*> Both=Flat.Union(Tree);
+        for (const USCS_Node* Node : Both)
+        {
+            if (!Node || !Cast<UCarnivalRideSeatComponent>(Node->ComponentTemplate)) continue;
+            FlatSeats+=Flat.Contains(Node); TreeSeats+=Tree.Contains(Node);
+            if (!Flat.Contains(Node) || !Tree.Contains(Node) || Node->GetVariableName()==TEXT("CarnivalRideSeat"))
+                Result.Add(FString::Printf(TEXT("SCS %s variable=%s flat=%d tree=%d template=%s"),
+                    *Node->GetPathName(), *Node->GetVariableName().ToString(), Flat.Contains(Node),
+                    Tree.Contains(Node), *GetPathNameSafe(Node->ComponentTemplate)));
+        }
+        Result.Add(FString::Printf(TEXT("class %s flat_seats=%d tree_seats=%d"),*Class->GetPathName(),FlatSeats,TreeSeats));
+    }
+#endif
+    return Result;
+}
 
 bool UCarnivalRouteEditorLibrary::CutLandscapeOpening(AActor* LandscapeActor, FVector WorldMinimum, FVector WorldMaximum, FTransform LevelTransform)
 {

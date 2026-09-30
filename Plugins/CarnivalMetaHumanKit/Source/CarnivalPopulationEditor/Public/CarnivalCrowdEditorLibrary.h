@@ -78,4 +78,8 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Carnival|Crowd")
     static int32 CountBuiltZoneGraphLanes(UWorld* World);
+
+    /** Read-only editor diagnostics; raw Mass counts include every entity type. */
+    UFUNCTION(BlueprintCallable, Category = "Carnival|Crowd")
+    static TArray<FString> DescribeLiveMassSimulation(UWorld* World);
 };

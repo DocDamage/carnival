@@ -55,6 +55,21 @@ if any(name.startswith('hospital_corridor_') for name in selected):
     report['source_hashes'][str(candidate_path)]=hashlib.sha256(candidate_path.read_bytes()).hexdigest()
     candidates=json.loads(candidate_path.read_text())
     for name,item in candidates['routes'].items(): routes[name]=item['candidate_floor_points_cm']
+if any(name in selected for name in ('sewer_stair_handoff','sewer_lower_corridor')):
+    candidate_path=ROOT/'Saved/WorldExpansion/Sewer_Handoff_Fine_Candidate.json'
+    candidate=json.loads(candidate_path.read_text())
+    if not candidate.get('success') or 'sewer_stair_handoff' in selected and not candidate.get('route_found'):
+        raise RuntimeError('Sewer handoff requires a fresh measured candidate path')
+    for name,digest in candidate['source_hashes'].items():
+        actual=ROOT/'Content/Carnival/World/Levels'/(name+'.umap')
+        if hashlib.sha256(actual.read_bytes()).hexdigest()!=digest:
+            raise RuntimeError('Sewer candidate uses stale level geometry '+name)
+    report['source_hashes'][str(candidate_path)]=hashlib.sha256(candidate_path.read_bytes()).hexdigest()
+    if 'sewer_stair_handoff' in selected:routes['sewer_stair_handoff']=candidate['candidate_floor_points_cm']
+    if 'sewer_lower_corridor' in selected:
+        routes['sewer_lower_corridor']=candidate['partial_floor_points_cm']
+        report['partial_sewer_scope']=candidate['partial_scope']
+        report['remaining_R11_handoff_gap_cm']=candidate['partial_remaining_handoff_gap_cm']
 if any(name not in routes for name in selected): raise ValueError('Unknown case: '+','.join(selected))
 report['candidate_only_routes']=['sewer_corridor','atlantis_hall']+[name for name in selected if name.startswith('hospital_corridor_')]
 le=unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
@@ -166,13 +181,20 @@ def tick(delta):
             if now-state['last_sample']>=.5:
                 state['leg']['samples'].append({'seconds':round(now-state['leg_start'],2),'position_cm':pos.to_tuple(),'mode':str(move.get_editor_property('movement_mode')),'camera_cm':unreal.GameplayStatics.get_player_camera_manager(state['game'],0).get_camera_location().to_tuple()})
                 state['last_sample']=now; write()
-            if remaining<65:
+            tolerance=65
+            if selected[state['case_index']] in ('sewer_stair_handoff','sewer_lower_corridor'):
+                segment=xy(path[state['index']-1],target)
+                tolerance=max(8,min(25,segment*.25))
+            if remaining<tolerance:
                 if state['index']<len(path)-1: state['index']+=1; return
                 pawn.get_movement_component().stop_movement_immediately()
                 state.update(phase='endpoint_settle',ready=wall+.75,deadline=wall+10); return
             direction=unreal.Vector(target.x-pos.x,target.y-pos.y,0)/max(remaining,1)
             state['pc'].set_control_rotation(unreal.Rotator(pitch=-10,yaw=math.degrees(math.atan2(direction.y,direction.x)),roll=0))
-            pawn.add_movement_input(direction,1,True)
+            scale=max(.15,min(1,remaining/60)) if selected[state['case_index']] in ('sewer_stair_handoff','sewer_lower_corridor') else 1
+            # Tight surveyed corners need the same analogue slowing available
+            # to a player; full-speed overshoot can cut outside a clear path.
+            pawn.add_movement_input(direction,scale,True)
         elif state['phase']=='endpoint_settle' and wall>=state['ready']:
             target=state['path'][-1]; floor=floor_at(target)
             state['leg']['endpoint_floor_probe']=floor

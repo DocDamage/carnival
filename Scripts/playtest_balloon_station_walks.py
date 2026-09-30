@@ -6,6 +6,7 @@ Run after author_balloon_stations.py succeeds. Render/physical input acceptance
 remain separate from this character movement test.
 """
 import json
+import hashlib
 import math
 import os
 import time
@@ -17,6 +18,8 @@ unreal.EditorPythonScripting.set_keep_python_script_alive(True)
 
 ROOT=Path(unreal.Paths.project_dir())
 OUT=ROOT/'Saved/RideDevelopment'
+REPORT_NAME=os.environ.get('CARNIVAL_BALLOON_WALK_REPORT','Balloon_Station_Walks')
+if not REPORT_NAME.replace('_','').isalnum(): raise ValueError('Unsafe walking report name')
 AUTHORING=json.loads((OUT/'Balloon_Stations.json').read_text())
 assert AUTHORING.get('success'), 'Ground stations must be authored before player acceptance'
 STATIONS=AUTHORING['stations']
@@ -33,11 +36,12 @@ REPORT={'success':False,'physical_input':False,'rendered_acceptance':'pending',
         'movement':'Production CarnivalPlayerCharacter walking input, outbound and return',
         'selected_station_indices':[station['station_index'] for station in STATIONS],
         'tests':[],'errors':[],'excluded_mass_spawners':[]}
+REPORT['balloon_stations_sha256']=hashlib.sha256((OUT/'Balloon_Stations.json').read_bytes()).hexdigest()
 S={'phase':'startup','deadline':time.monotonic()+300,'busy':False,'case':0}
 
 def save():
     REPORT['phase']=S['phase']
-    (OUT/'Balloon_Station_Walks.json').write_text(json.dumps(REPORT,indent=2))
+    (OUT/(REPORT_NAME+'.json')).write_text(json.dumps(REPORT,indent=2))
 
 def planar(a,b): return math.hypot(a.x-b.x,a.y-b.y)
 
@@ -74,7 +78,9 @@ def fail(message):
             [S['player']],unreal.DrawDebugTrace.NONE,True)
         hit=result.to_tuple() if result else None
         REPORT['tests'][-1]['failure_position_cm']=list(pos.to_tuple())
-        if hit and hit[0]: REPORT['tests'][-1]['blocker']=hit[9].get_path_name() if hit[9] else 'unknown'
+        if hit and hit[0]:
+            REPORT['tests'][-1]['blocker']=hit[9].get_path_name() if hit[9] else 'unknown'
+            REPORT['tests'][-1]['blocking_component']=hit[10].get_path_name() if hit[10] else None
     if S['case']+1<len(STATIONS) and S.get('player'):
         S['case']+=1; start_leg(); return
     finish()

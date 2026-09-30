@@ -23,13 +23,18 @@ def backup(package):
             target.parent.mkdir(parents=True,exist_ok=True); shutil.copy2(source,target)
 
 def snapshot():
+    def geometry(transform):
+        # Unreal's string representation includes the temporary wrapper address.
+        # Compare the measured transform, independent of wrapper allocation.
+        return {key:[round(float(value),6) for value in getattr(transform,key).to_tuple()]
+                for key in ('translation','rotation','scale3d')}
     rows={}
     for actor in unreal.get_editor_subsystem(unreal.EditorActorSubsystem).get_all_level_actors():
         if actor.get_class().get_name()!='BP_HotAirBalloon_Carnival_C': continue
-        values={'actor':str(actor.get_actor_transform())}
+        values={'actor':geometry(actor.get_actor_transform())}
         for component in actor.get_components_by_class(unreal.SceneComponent):
             if component.get_name()=='StaticMeshComponent1' or isinstance(component,unreal.CarnivalRideSeatComponent):
-                values[component.get_name()]=str(component.get_world_transform())
+                values[component.get_name()]=geometry(component.get_world_transform())
         rows[actor.get_name()]=values
     return rows
 
@@ -46,6 +51,31 @@ unreal.BlueprintEditorLibrary.compile_blueprint(adapted)
 child=unreal.load_asset(CHILD)
 unreal.BlueprintEditorLibrary.reparent_blueprint(child,adapted.generated_class())
 unreal.BlueprintEditorLibrary.compile_blueprint(child)
+# Reparenting to a duplicated base leaves inherited SCS attachment owner names
+# pointing at the vendor class. Static poses can match while seats follow the
+# stationary root instead of the moving basket. Rebind the exact basket handle.
+sds=unreal.get_engine_subsystem(unreal.SubobjectDataSubsystem)
+data=unreal.SubobjectDataBlueprintFunctionLibrary
+items=[(handle,data.get_associated_object(data.get_data(handle)))
+       for handle in sds.k2_gather_subobject_data_for_blueprint(child)]
+baskets=[handle for handle,obj in items if isinstance(obj,unreal.StaticMeshComponent)
+         and obj.get_name().removesuffix('_GEN_VARIABLE')=='StaticMeshComponent1']
+assert len(baskets)==1, 'Expected the exact inherited moving basket'
+seat_items=[(handle,obj) for handle,obj in items if isinstance(obj,unreal.CarnivalRideSeatComponent)]
+assert len(seat_items)==4, 'Expected all four measured basket positions'
+for handle,seat in seat_items:
+    assert sds.attach_subobject(baskets[0],handle), 'Cannot rebind basket position '+seat.get_name()
+REPORT['rebound_seat_templates']=[seat.get_name() for _,seat in seat_items]
+unreal.BlueprintEditorLibrary.compile_blueprint(child)
+REPORT['placed_seat_attachments']=[]
+for actor in unreal.get_editor_subsystem(unreal.EditorActorSubsystem).get_all_level_actors():
+    if actor.get_class().get_name()!='BP_HotAirBalloon_Carnival_C': continue
+    for seat in actor.get_components_by_class(unreal.CarnivalRideSeatComponent):
+        parent=seat.get_attach_parent()
+        REPORT['placed_seat_attachments'].append({'actor':actor.get_name(),'seat':seat.get_name(),
+            'parent':parent.get_name() if parent else None})
+assert len(REPORT['placed_seat_attachments'])==40
+assert all(row['parent']=='StaticMeshComponent1' for row in REPORT['placed_seat_attachments']), 'Position does not follow basket'
 after=snapshot()
 REPORT['geometry_before']=before
 REPORT['geometry_after']=after

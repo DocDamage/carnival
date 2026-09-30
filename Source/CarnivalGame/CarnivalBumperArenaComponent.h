@@ -15,6 +15,8 @@ class CARNIVALGAME_API UCarnivalBumperArenaComponent : public UActorComponent
     GENERATED_BODY()
 public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Arena") TArray<TObjectPtr<ACarnivalBumperCar>> Cars;
+    /** Explicit vendor display cars replaced by Cars; applied after Blueprint BeginPlay. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Arena") TArray<FName> ReplacedDisplayCarComponents;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Arena") FVector LocalCenter = FVector::ZeroVector;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Arena") FVector2D HalfExtent = FVector2D(900, 700);
     UFUNCTION(BlueprintCallable) bool InitializeArena();

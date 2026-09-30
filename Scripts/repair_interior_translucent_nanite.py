@@ -36,7 +36,10 @@ for actor in actors.get_all_level_actors():
             packages.add(package)
         # BlueprintReadWrite assignment avoids reconstructing the entire actor
         # and invalidating its other component references during enumeration.
+        actor.modify()
+        component.modify()
         component.disallow_nanite=True
+        assert component.disallow_nanite
         REPORT['changed'].append({'actor':actor.get_path_name(),'component':component.get_name(),'materials':translucent})
 for package in sorted(packages):
     assert unreal.EditorLevelLibrary.set_current_level_by_name(package.rsplit('/',1)[-1])
@@ -44,5 +47,6 @@ for package in sorted(packages):
     REPORT['saved_packages'].append(package)
 output=ROOT/'Saved/PresentationAcceptance/TranslucentNaniteRepair.json'
 output.parent.mkdir(parents=True,exist_ok=True)
+REPORT['success']=not REPORT['errors']
 output.write_text(json.dumps(REPORT,indent=2))
 unreal.SystemLibrary.quit_editor()

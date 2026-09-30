@@ -49,13 +49,51 @@ def finish(error=None):
     report['success']=not report['errors']; write(); le.editor_request_end_play()
     state.update(phase='exit',deadline=time.monotonic()+3)
 def walk_begin(points,phase):
-    state.update(phase=phase,path=points,index=0,progress=state['pawn'].get_actor_location(),progress_time=time.monotonic(),deadline=time.monotonic()+120)
+    position=state['pawn'].get_actor_location()
+    state.update(phase=phase,path=points,index=0,segment_start=position-unreal.Vector(0,0,state['half']),
+        progress=position,progress_time=time.monotonic(),deadline=time.monotonic()+120,last_walk_sample=0)
 def speed():
     prop='current_speed' if entry['kind']=='boat' else 'current_forward_speed'
     return abs(float(state['vehicle'].get_editor_property(prop)))
 def check_ground(p):
     f=floor(p,[state['pawn'],state['vehicle']]); m=state['pawn'].get_movement_component()
     return f if f and not f['initial_overlap'] and f['normal'][2]>.7 and m.is_moving_on_ground() and abs(p.z-f['point_cm'][2]-state['half'])<45 else None
+
+def return_path_after_unload(pos):
+    # Hovercraft unloads on either clear side of its hull. Reversing the arrival
+    # markers can send a left-side passenger straight through the parked craft
+    # to the right-side boarding marker. Follow the actual hull's rear perimeter
+    # on the existing pier, checking real Pawn collision and floor first.
+    if entry['kind']!='hovercraft': return list(reversed(state['approach']))
+    vehicle=state['vehicle'];transform=vehicle.get_actor_transform()
+    capsule=state['pawn'].get_component_by_class(unreal.CapsuleComponent)
+    radius=capsule.get_scaled_capsule_radius()
+    extent=vehicle.get_editor_property('collision_box').get_scaled_box_extent()
+    local=unreal.MathLibrary.inverse_transform_location(transform,pos)
+    destination=unreal.MathLibrary.inverse_transform_location(transform,state['approach'][0])
+    side=1 if local.y>=0 else -1; end_side=1 if destination.y>=0 else -1
+    back=extent.x+radius+150; width=extent.y+radius+150
+    markers=[unreal.MathLibrary.transform_location(transform,unreal.Vector(-back,side*width,0))]
+    if side!=end_side:
+        markers.append(unreal.MathLibrary.transform_location(transform,unreal.Vector(-back,end_side*width,0)))
+    markers.append(state['approach'][0])
+    path=[]; previous=pos; checks=[]
+    for marker in markers:
+        ground=floor(marker,[state['pawn'],vehicle])
+        if not ground or ground['initial_overlap'] or ground['normal'][2]<.7:
+            raise RuntimeError('Hovercraft perimeter exit lacks safe pier floor')
+        foot=vec(ground['point_cm']); center=foot+unreal.Vector(0,0,state['half']+3)
+        trace=unreal.SystemLibrary.capsule_trace_single_by_profile(state['game'],previous,center,
+            radius,state['half'],'Pawn',False,[state['pawn']],unreal.DrawDebugTrace.NONE,True)
+        hit=trace.to_tuple() if trace else None
+        checks.append({'from_cm':previous.to_tuple(),'to_cm':center.to_tuple(),'floor':ground,
+            'blocking_actor':hit[9].get_path_name() if hit and hit[0] and hit[9] else None})
+        if hit and hit[0]:
+            report['exit_route_clearance']=checks;write()
+            raise RuntimeError('Hovercraft perimeter exit is blocked by '+str(checks[-1]['blocking_actor']))
+        path.append(foot); previous=center
+    report['exit_route_clearance']=checks;write()
+    return path
 
 def tick(delta):
     if state['busy']: return
@@ -92,9 +130,21 @@ def tick(delta):
         if state['phase'] in ('walk_to_board','walk_back'):
             if pawn.get_movement_component().is_swimming(): raise RuntimeError('Dry approach entered swimming')
             target=state['path'][state['index']]; distance=xy(pos,target)
-            if pos.z<target.z-100: raise RuntimeError('Approach fell below measured floor')
-            if distance<55:
-                if state['index']+1<len(state['path']): state['index']+=1; return
+            segment_start=state['segment_start'];dx=target.x-segment_start.x;dy=target.y-segment_start.y
+            fraction=max(0,min(1,((pos.x-segment_start.x)*dx+(pos.y-segment_start.y)*dy)/max(dx*dx+dy*dy,1)))
+            expected_floor=segment_start.z+(target.z-segment_start.z)*fraction
+            if pos.z<expected_floor+state['half']-100:
+                raise RuntimeError('Approach fell below measured floor along the current segment')
+            if wall-state['last_walk_sample']>.5:
+                report.setdefault('walk_samples',[]).append({'phase':state['phase'],'pawn_cm':pos.to_tuple(),
+                    'expected_floor_z_cm':expected_floor,'actual_floor':floor(pos,[pawn,vehicle]),
+                    'movement_mode':str(pawn.get_movement_component().get_editor_property('movement_mode'))})
+                state['last_walk_sample']=wall;write()
+            # Boarding must reach the saved marker accurately. Stopping 55 cm
+            # early can leave the capsule outside the actual mount trigger.
+            tolerance=15 if state['phase']=='walk_to_board' and state['index']+1==len(state['path']) else 55
+            if distance<tolerance:
+                if state['index']+1<len(state['path']): state['segment_start']=target;state['index']+=1; return
                 pawn.get_movement_component().stop_movement_immediately()
                 state.update(phase='board_settle' if state['phase']=='walk_to_board' else 'finish_settle',ready=wall+.75); return
             if xy(pos,state['progress'])>15: state.update(progress=pos,progress_time=wall)
@@ -105,17 +155,27 @@ def tick(delta):
         if state['phase']=='board_settle' and wall>=state['ready']:
             f=check_ground(pos)
             if not f: raise RuntimeError('Boarding approach is not grounded')
+            seat=unreal.MathLibrary.transform_location(vehicle.get_actor_transform(),vehicle.get_editor_property('driver_relative_offset'))
+            capsule=pawn.get_component_by_class(unreal.CapsuleComponent)
+            trace=unreal.SystemLibrary.capsule_trace_single_by_profile(state['game'],pos,seat,
+                capsule.get_scaled_capsule_radius(),state['half'],'Pawn',False,[pawn,vehicle],unreal.DrawDebugTrace.NONE,True)
+            hit=trace.to_tuple() if trace else None
+            report['mount_diagnostics']={'pawn_cm':pos.to_tuple(),'vehicle_cm':vehicle.get_actor_location().to_tuple(),
+                'seat_cm':seat.to_tuple(),'trigger_overlap':vehicle.get_editor_property('mount_trigger').is_overlapping_actor(pawn),
+                'speed_cm_s':speed(),'seat_path_blocker':{'actor':hit[9].get_path_name() if hit[9] else None,
+                    'component':hit[10].get_path_name() if hit[10] else None,'initial_overlap':bool(hit[1])} if hit and hit[0] else None}
+            write()
             if not vehicle.can_mount(pawn): raise RuntimeError('Saved approach cannot reach vehicle seat')
             event('board_requested',pawn_cm=pos.to_tuple(),floor=f)
             pawn.try_interact_or_mount(); state.update(phase='board_check',ready=wall+.5); return
         if state['phase']=='board_check' and wall>=state['ready']:
-            if state['pc'].get_pawn()!=vehicle or vehicle.get_editor_property('current_rider')!=pawn:
+            if unreal.GameplayStatics.get_player_pawn(state['game'],0)!=vehicle or vehicle.get_editor_property('current_rider')!=pawn:
                 raise RuntimeError('Context interaction did not mount this vehicle')
             origin=vehicle.get_actor_location(); yaw=vehicle.get_actor_rotation().yaw; a=math.radians(yaw)
             state.update(origin=origin,forward=unreal.Vector(math.cos(a),math.sin(a),0),yaw=yaw,phase='drive_outbound',deadline=wall+120,last_sample=0,progress_time=wall,progress=origin)
             event('mounted',vehicle_cm=origin.to_tuple()); return
         if state['phase'] in ('drive_outbound','drive_return'):
-            if state['pc'].get_pawn()!=vehicle or vehicle.get_editor_property('current_rider')!=pawn: raise RuntimeError('Lost driver possession')
+            if unreal.GameplayStatics.get_player_pawn(state['game'],0)!=vehicle or vehicle.get_editor_property('current_rider')!=pawn: raise RuntimeError('Lost driver possession')
             vpos=vehicle.get_actor_location(); d=vpos-state['origin']; fwd=state['forward']
             along=d.x*fwd.x+d.y*fwd.y; lateral=abs(d.x*fwd.y-d.y*fwd.x)
             if lateral>float(entry.get('drive_lane_half_width_cm',300)): raise RuntimeError('Vehicle departed surveyed drive lane')
@@ -142,12 +202,12 @@ def tick(delta):
         if state['phase']=='unload' and wall>=state['ready']:
             vehicle.dismount(); state.update(phase='unload_check',ready=wall+1); return
         if state['phase']=='unload_check' and wall>=state['ready']:
-            if state['pc'].get_pawn()!=pawn or vehicle.get_editor_property('current_rider'):
+            if unreal.GameplayStatics.get_player_pawn(state['game'],0)!=pawn or vehicle.get_editor_property('current_rider'):
                 raise RuntimeError('Ordinary unloading failed at returned boarding location')
             f=check_ground(pos)
             if not f: raise RuntimeError('Unloaded pawn lacks safe floor')
             event('unloaded',pawn_cm=pos.to_tuple(),floor=f)
-            walk_begin(list(reversed(state['approach'])),'walk_back'); return
+            walk_begin(return_path_after_unload(pos),'walk_back'); return
         if state['phase']=='finish_settle' and wall>=state['ready']:
             f=check_ground(pos)
             if not f: raise RuntimeError('Return approach is not grounded')
