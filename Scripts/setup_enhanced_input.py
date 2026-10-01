@@ -1,5 +1,5 @@
 """Create Enhanced Input Actions and Mapping Contexts for Carnival Character & Motorcycle.
-Add Fast Travel actions F1-F7 to IMC_CarnivalPlayer & IMC_CarnivalMotorcycle and assign to BP_CarnivalPlayerController.
+Set up IMC_CarnivalPlayer & IMC_CarnivalMotorcycle and assign them to BP_CarnivalPlayerController. (The F1-F7 map-travel actions were removed 2026-10-01; travel is seamless in LV_Carnival.)
 
 Run headlessly:
     UnrealEditor-Cmd.exe "CarnivalGame.uproject" -unattended -nullrhi -nosplash
@@ -69,14 +69,6 @@ def main():
     ia_brake = create_input_action("IA_Brake", unreal.InputActionValueType.AXIS1D)
 
     # 2. Setup IMC_CarnivalPlayer
-    # Fast Travel Actions (F1 - F7)
-    ia_travel_carnival = create_input_action("IA_TravelCarnival", unreal.InputActionValueType.BOOLEAN)
-    ia_travel_mansion = create_input_action("IA_TravelMansion", unreal.InputActionValueType.BOOLEAN)
-    ia_travel_town = create_input_action("IA_TravelTown", unreal.InputActionValueType.BOOLEAN)
-    ia_travel_lighthouse = create_input_action("IA_TravelLighthouse", unreal.InputActionValueType.BOOLEAN)
-    ia_travel_castle = create_input_action("IA_TravelCastle", unreal.InputActionValueType.BOOLEAN)
-    ia_travel_arena = create_input_action("IA_TravelArena", unreal.InputActionValueType.BOOLEAN)
-    ia_travel_mars = create_input_action("IA_TravelMars", unreal.InputActionValueType.BOOLEAN)
 
     # IMC_CarnivalPlayer
     imc_player = create_mapping_context("IMC_CarnivalPlayer")
@@ -134,13 +126,6 @@ def main():
         imc_player.map_key(ia_menu, unreal.Key(unreal.Name("M")))
         imc_player.map_key(ia_menu, unreal.Key(unreal.Name("Tab")))
 
-        imc_player.map_key(ia_travel_carnival, unreal.Key(unreal.Name("F1")))
-        imc_player.map_key(ia_travel_mansion, unreal.Key(unreal.Name("F2")))
-        imc_player.map_key(ia_travel_town, unreal.Key(unreal.Name("F3")))
-        imc_player.map_key(ia_travel_lighthouse, unreal.Key(unreal.Name("F4")))
-        imc_player.map_key(ia_travel_castle, unreal.Key(unreal.Name("F5")))
-        imc_player.map_key(ia_travel_arena, unreal.Key(unreal.Name("F6")))
-        imc_player.map_key(ia_travel_mars, unreal.Key(unreal.Name("F7")))
         eal.save_asset("/Game/Carnival/Input/IMC_CarnivalPlayer")
         log("Configured IMC_CarnivalPlayer")
 
@@ -181,13 +166,6 @@ def main():
         imc_moto.map_key(ia_menu, unreal.Key(unreal.Name("M")))
         imc_moto.map_key(ia_menu, unreal.Key(unreal.Name("Tab")))
 
-        imc_moto.map_key(ia_travel_carnival, unreal.Key(unreal.Name("F1")))
-        imc_moto.map_key(ia_travel_mansion, unreal.Key(unreal.Name("F2")))
-        imc_moto.map_key(ia_travel_town, unreal.Key(unreal.Name("F3")))
-        imc_moto.map_key(ia_travel_lighthouse, unreal.Key(unreal.Name("F4")))
-        imc_moto.map_key(ia_travel_castle, unreal.Key(unreal.Name("F5")))
-        imc_moto.map_key(ia_travel_arena, unreal.Key(unreal.Name("F6")))
-        imc_moto.map_key(ia_travel_mars, unreal.Key(unreal.Name("F7")))
         eal.save_asset("/Game/Carnival/Input/IMC_CarnivalMotorcycle")
         log("Configured IMC_CarnivalMotorcycle")
 
@@ -217,16 +195,8 @@ def main():
             pc_cdo.set_editor_property("steer_action", ia_steer)
             pc_cdo.set_editor_property("brake_action", ia_brake)
 
-            pc_cdo.set_editor_property("travel_carnival_action", ia_travel_carnival)
-            pc_cdo.set_editor_property("travel_mansion_action", ia_travel_mansion)
-            pc_cdo.set_editor_property("travel_town_action", ia_travel_town)
-            pc_cdo.set_editor_property("travel_lighthouse_action", ia_travel_lighthouse)
-            pc_cdo.set_editor_property("travel_castle_action", ia_travel_castle)
-            pc_cdo.set_editor_property("travel_arena_action", ia_travel_arena)
-            pc_cdo.set_editor_property("travel_mars_action", ia_travel_mars)
             eal.save_asset("/Game/Carnival/Blueprints/BP_CarnivalPlayerController")
             log("Assigned all Input Actions & Mapping Contexts to BP_CarnivalPlayerController")
-            log("Assigned Travel Actions F1-F7 to BP_CarnivalPlayerController!")
 
 main()
 

@@ -130,28 +130,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	UInputAction* SettingsMenuAction;
 
-	/* Fast-Travel Hotkeys (F1-F7) */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Travel")
-	UInputAction* TravelCarnivalAction;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Travel")
-	UInputAction* TravelMansionAction;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Travel")
-	UInputAction* TravelTownAction;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Travel")
-	UInputAction* TravelLighthouseAction;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Travel")
-	UInputAction* TravelCastleAction;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Travel")
-	UInputAction* TravelArenaAction;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Travel")
-	UInputAction* TravelMarsAction;
-
 	/* Motorcycle Specific Actions */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Motorcycle")
 	UInputAction* ThrottleAction;
@@ -182,9 +160,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Settings")
 	void SetMotorcyclePhysicsMode(EMotorcyclePhysicsMode NewMode);
-
-	UFUNCTION(BlueprintCallable, Category = "Travel")
-	void TravelToMap(const FString& MapName);
 
 	// Runtime copies retain authored modifiers; source input assets are never edited.
 	void InitializeControlRemapping();
@@ -259,14 +234,6 @@ protected:
 	void OnWeaponSlot2();
 	void OnWeaponSlot3();
 	void OnWeaponSlot0();
-
-	void OnTravelCarnival();
-	void OnTravelMansion();
-	void OnTravelTown();
-	void OnTravelLighthouse();
-	void OnTravelCastle();
-	void OnTravelArena();
-	void OnTravelMars();
 
 	void OnThrottle(const FInputActionValue& Value);
 	void OnSteer(const FInputActionValue& Value);

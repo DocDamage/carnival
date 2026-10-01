@@ -545,37 +545,6 @@ void ACarnivalPlayerController::SetupInputComponent()
 			EnhancedInputComponent->BindAction(SettingsMenuAction, ETriggerEvent::Started, this, &ACarnivalPlayerController::ToggleSettingsMenu);
 		}
 
-		// Fast-travel hotkeys are editor-only; packaged travel follows the authored routes.
-#if WITH_EDITOR
-		if (TravelCarnivalAction)
-		{
-			EnhancedInputComponent->BindAction(TravelCarnivalAction, ETriggerEvent::Started, this, &ACarnivalPlayerController::OnTravelCarnival);
-		}
-		if (TravelMansionAction)
-		{
-			EnhancedInputComponent->BindAction(TravelMansionAction, ETriggerEvent::Started, this, &ACarnivalPlayerController::OnTravelMansion);
-		}
-		if (TravelTownAction)
-		{
-			EnhancedInputComponent->BindAction(TravelTownAction, ETriggerEvent::Started, this, &ACarnivalPlayerController::OnTravelTown);
-		}
-		if (TravelLighthouseAction)
-		{
-			EnhancedInputComponent->BindAction(TravelLighthouseAction, ETriggerEvent::Started, this, &ACarnivalPlayerController::OnTravelLighthouse);
-		}
-		if (TravelCastleAction)
-		{
-			EnhancedInputComponent->BindAction(TravelCastleAction, ETriggerEvent::Started, this, &ACarnivalPlayerController::OnTravelCastle);
-		}
-		if (TravelArenaAction)
-		{
-			EnhancedInputComponent->BindAction(TravelArenaAction, ETriggerEvent::Started, this, &ACarnivalPlayerController::OnTravelArena);
-		}
-		if (TravelMarsAction)
-		{
-			EnhancedInputComponent->BindAction(TravelMarsAction, ETriggerEvent::Started, this, &ACarnivalPlayerController::OnTravelMars);
-		}
-#endif
 
 		// Motorcycle driving
 		if (ThrottleAction)
@@ -873,45 +842,6 @@ void ACarnivalPlayerController::OnWeaponSlot0()
 	}
 }
 
-void ACarnivalPlayerController::OnTravelCarnival()
-{
-	TravelToMap(TEXT("/Game/Creepwood_Carnival_Meshingun/Environment/Map/LV_Carnival"));
-}
-
-void ACarnivalPlayerController::OnTravelMansion()
-{
-	TravelToMap(TEXT("/Game/Mansion/Levels/LV_Haunted_Mansion"));
-}
-
-void ACarnivalPlayerController::OnTravelTown()
-{
-	TravelToMap(TEXT("/Game/Town/Level/L_Main_Level"));
-}
-
-void ACarnivalPlayerController::OnTravelLighthouse()
-{
-	TravelToMap(TEXT("/Game/LightHouse_Meshingun/Map/LV_LightHouse"));
-}
-
-void ACarnivalPlayerController::OnTravelCastle()
-{
-	TravelToMap(TEXT("/Game/Medieval_Castle/Level/Medieval_Castle_Level"));
-}
-
-void ACarnivalPlayerController::OnTravelArena()
-{
-	TravelToMap(TEXT("/Game/Gladiator_Arena/Maps/Gladiators_Land"));
-}
-
-void ACarnivalPlayerController::OnTravelMars()
-{
-	TravelToMap(TEXT("/Game/Mars_Futuristic_Cars/Maps/Playmap"));
-}
-
-void ACarnivalPlayerController::TravelToMap(const FString& MapName)
-{
-	UGameplayStatics::OpenLevel(this, FName(*MapName));
-}
 
 void ACarnivalPlayerController::OnThrottle(const FInputActionValue& Value)
 {

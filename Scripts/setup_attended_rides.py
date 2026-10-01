@@ -113,8 +113,6 @@ for context_name in ('IMC_CarnivalPlayer', 'IMC_CarnivalMotorcycle'):
     map_input(context, unreal.load_asset(INPUT + '/IA_Attack'), 'LeftMouseButton')
     for button in ('M','Tab'):
         map_input(context, unreal.load_asset(INPUT + '/IA_SettingsMenu'), button)
-    for number, place in enumerate(['Carnival','Mansion','Town','Lighthouse','Castle','Arena','Mars'],1):
-        map_input(context, unreal.load_asset(INPUT + '/IA_Travel' + place), 'F' + str(number))
     EAL.save_loaded_asset(context, False)
 
 path = '/Game/Carnival/Blueprints/BP_CarnivalPlayerController'
