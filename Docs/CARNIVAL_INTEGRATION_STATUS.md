@@ -260,7 +260,10 @@ All 8 rides present in `LV_Carnival` are now derived, wired, and instantiated:
 | Teapot | `BP_Teapot_Carnival` (SunshineShimmer) | `SM_Teapot_Ride_Platform4` | 8 | manual |
 
 Reproduce after a fresh clone (in order): `Scripts/wire_ride.py`,
-`Scripts/instantiate_ride.py`, `Scripts/place_queue_points.py`.
+`Scripts/instantiate_ride.py`, then `Scripts/author_all_attended_rides.py` for the
+queues. The old `place_queue_points.py` lines (started 2.5 m from each ride origin,
+so inside the Circus and Haunted House) had no owning queue after the attended-ride
+pass; they were deleted on 2026-10-01 (`Scripts/remove_legacy_queue_points.py`).
 
 Plugin additions since the first-ride pass:
 

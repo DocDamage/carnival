@@ -44,7 +44,9 @@ try:
  # Sealed doors (CarnivalSealedDoor tag) never open, so they stay solid.
  ignore=[a for a in acts if a.get_actor_label().startswith(('BP_MGate01','BP_Door')) and unreal.Name('CarnivalSealedDoor') not in list(a.get_editor_property('tags'))]
  R['passable_doors']=sorted({a.get_actor_label() for a in ignore})
- anchors=[x['location'] for x in json.loads((ROOT/'Saved/WorldExpansion/RouteAnchors_20261001/index.json').read_text())['anchors']]
+ # Live route anchors (what "Return to path" uses), not the authoring report: anchors have been removed since.
+ anchors=[list(a.get_actor_location().to_tuple()) for a in sorted(acts,key=lambda a:a.get_actor_label()) if unreal.Name('CarnivalRouteAnchor') in list(a.get_editor_property('tags'))]
+ assert anchors,'No CarnivalRouteAnchor actors loaded'
  stands=[]
  for nm in ('CampaignStationsAuthored2_20260930','CampaignStationsAuthored3_20260930','CampaignStationsAuthored4_20260930','CampaignStationsAuthored5_20261001'):
   for row in json.loads((ROOT/'Saved/CampaignAcceptance'/nm/'index.json').read_text())['placed']:
@@ -144,17 +146,18 @@ try:
   return sorted(res,key=lambda r:-r['cells'])
  def cell_of(p):
   ix,iy=round((p[0]-cx)/S),round((p[1]-cy)/S);best=None
-  for dx in (-1,0,1):
-   for dy in (-1,0,1):
+  # Two cell rings, up to 180 cm: an anchor beside a prop can have no standing-clear cell in its own column.
+  for dx in (-2,-1,0,1,2):
+   for dy in (-2,-1,0,1,2):
     for z in layers.get((ix+dx,iy+dy),[]):
      d=math.dist(wpos((ix+dx,iy+dy,z)).to_tuple(),(p[0],p[1],p[2]-98))
-     if d<120 and (best is None or d<best[0]):best=(d,(ix+dx,iy+dy,z))
-  return best[1] if best else None
+     if d<180 and (best is None or d<best[0]):best=(d,(ix+dx,iy+dy,z))
+  return best
  checks=[('anchor_%d'%i,p) for i,p in enumerate(box_anchors)]+[(l,p) for l,p in stands if inbox(p)]
  R['checkpoints']=[]
  for lab,p in checks:
-  c=cell_of(p)
-  R['checkpoints'].append({'label':lab,'point':p,'cell_found':bool(c),'reachable':c in seen if c else None,'returnable':c in back if c else None})
+  b=cell_of(p);c=b[1] if b else None
+  R['checkpoints'].append({'label':lab,'point':p,'cell_found':bool(c),'cell_dist':round(b[0]) if b else None,'reachable':c in seen if c else None,'returnable':c in back if c else None})
  R.update(reachable=len(seen),returnable=len(back),traps=clusters(traps),unreachable=[c for c in clusters(unreach) if c['area_m2']>=4],
   reachable_z_range=[round(min(n[2] for n in seen)),round(max(n[2] for n in seen))],seconds=round(time.time()-t0))
  R['success']=True
