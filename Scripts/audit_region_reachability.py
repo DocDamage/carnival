@@ -27,6 +27,8 @@ REGIONS={
  'hospital_entrance':dict(entrance=(95552,128289,656),center=(96200,128900),half=2200,z=(450,1300),step=50),
  'atlantis_fine':dict(entrance=(-13500,-11000,-1750),center=(-13000,-10800),half=8500,z=(-2400,-1200),step=50),
  'docks_east':dict(entrance=(70300,17200,650),center=(70300,21000),half=11000,z=(200,1200),step=100),
+ # Carnival grounds: props span x -8400..9600, y -6600..6300 (probe_carnival_grounds_extent.py); entrance = PlayerStart by the gate.
+ 'carnival':dict(entrance=(-6671,-7596,196),center=(600,-200),half=9800,z=(0,2600),step=100),
 }
 NAME=os.environ.get('CARNIVAL_REGION','labs');SPEC=REGIONS[NAME]
 OUT=ROOT/'Saved/WorldExpansion/Reachability'/(NAME+os.environ.get('CARNIVAL_AUDIT_SUFFIX','_v4_20261001'));OUT.mkdir(parents=True,exist_ok=False)
@@ -39,7 +41,8 @@ try:
  world=unreal.EditorLoadingAndSavingUtils.load_map('/Game/Creepwood_Carnival_Meshingun/Environment/Map/LV_Carnival');assert world
  acts=unreal.get_editor_subsystem(unreal.EditorActorSubsystem).get_all_level_actors()
  # Doors that open in play are passable: the lab gate (verified in PIE) and the mansion BP_Door set.
- ignore=[a for a in acts if a.get_actor_label().startswith(('BP_MGate01','BP_Door'))]
+ # Sealed doors (CarnivalSealedDoor tag) never open, so they stay solid.
+ ignore=[a for a in acts if a.get_actor_label().startswith(('BP_MGate01','BP_Door')) and unreal.Name('CarnivalSealedDoor') not in list(a.get_editor_property('tags'))]
  R['passable_doors']=sorted({a.get_actor_label() for a in ignore})
  anchors=[x['location'] for x in json.loads((ROOT/'Saved/WorldExpansion/RouteAnchors_20261001/index.json').read_text())['anchors']]
  stands=[]

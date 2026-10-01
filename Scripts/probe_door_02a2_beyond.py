@@ -18,6 +18,8 @@ try:
     o, e = door.get_actor_bounds(False)
     f = door.get_actor_forward_vector(); f.z = 0; f = f.normal()
     r = door.get_actor_right_vector(); r.z = 0; r = r.normal()
+    if os.environ.get("CARNIVAL_DOOR_AXIS") == "right":  # mansion BP_Door02: the passage runs along the actor's right
+        f, r = r, f
     R["door"] = {"origin": o.to_tuple(), "forward": f.to_tuple(), "level": door.get_level().get_outermost().get_name()}
     floor_z = o.z - e.z
     rays = []
