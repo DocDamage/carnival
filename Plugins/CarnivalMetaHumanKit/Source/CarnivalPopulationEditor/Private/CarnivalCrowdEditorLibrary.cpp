@@ -22,8 +22,12 @@
 #include "MassSimulationSubsystem.h"
 #include "Misc/OutputDevice.h"
 #include "MassSpawnerTypes.h"
+#include "MassSpawnLocationProcessor.h"
 #include "MassVisualizationTrait.h"
 #include "Mass/MetaHumanMassCrowdVisualizationTrait.h"
+#include "Mass/MetaHumanMassFragments.h"
+#include "Mass/MetaHumanMassRepresentationSubsystem.h"
+#include "Mass/MetaHumanCrowdAppearanceProvider.h"
 #include "MetaHumanCrowdAnimationConfig.h"
 #include "MetaHumanCharacter.h"
 #include "MetaHumanCharacterPaletteItem.h"
@@ -43,12 +47,38 @@
 #include "MetaHumanPipelineSlotSelection.h"
 #include "MetaHumanWardrobeItem.h"
 #include "ZoneGraphData.h"
+#include "ZoneGraphQuery.h"
 #include "ZoneGraphDelegates.h"
 #include "ZoneGraphSettings.h"
 #include "ZoneGraphSubsystem.h"
 #include "ZoneShapeActor.h"
 #include "ZoneShapeComponent.h"
 #include "CarnivalMassPrerequisiteTrait.h"
+#include "CarnivalCrowdRoamTask.h"
+#include "CarnivalCrowdSpawnGenerator.h"
+#include "Engine/Blueprint.h"
+#include "Kismet2/BlueprintEditorUtils.h"
+#include "Kismet/KismetSystemLibrary.h"
+#include "K2Node_CallFunction.h"
+#include "K2Node_IfThenElse.h"
+#include "Materials/MaterialFunctionInterface.h"
+#include "Movement/MassMovementTrait.h"
+#include "Steering/MassSteeringTrait.h"
+#include "Avoidance/MassAvoidanceTrait.h"
+#include "Avoidance/MassNavigationObstacleTrait.h"
+#include "SmoothOrientation/MassSmoothOrientationTrait.h"
+#include "MassZoneGraphNavigationTrait.h"
+#include "MassZoneGraphNavigationFragments.h"
+#include "MassMovementFragments.h"
+#include "MassNavigationFragments.h"
+#include "MassStateTreeTrait.h"
+#include "MassStateTreeSchema.h"
+#include "MassStateTreeFragments.h"
+#include "Tasks/MassZoneGraphStandTask.h"
+#include "StateTree.h"
+#include "StateTreeEditorData.h"
+#include "StateTreeCompiler.h"
+#include "StateTreeCompilerLog.h"
 #include "UObject/Package.h"
 #include "UObject/SoftObjectPath.h"
 #include "UObject/UnrealType.h"
@@ -56,6 +86,175 @@
 #include "HAL/PlatformApplicationMisc.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
+
+FString UCarnivalCrowdEditorLibrary::GetMaterialFunctionStateId(UMaterialFunctionInterface* Function)
+{
+    return Function ? Function->StateId.ToString(EGuidFormats::Digits) : FString();
+}
+
+int32 UCarnivalCrowdEditorLibrary::GuardCrowdActorBeginPlay(UBlueprint* Blueprint, FString& OutError)
+{
+    OutError.Reset();
+    if (!Blueprint || Blueprint->GetOutermost()->GetName() != TEXT("/Game/Carnival/Crowd/Actors/BP_CarnivalCrowdActor"))
+    { OutError = TEXT("Expected the owned copy of the stock crowd actor"); return -1; }
+    TArray<UEdGraph*> Graphs; Blueprint->GetAllGraphs(Graphs);
+    for (auto* Graph : Graphs)
+    {
+        if (Graph->GetFName() != TEXT("EventGraph")) continue;
+        auto Find = [&](const TCHAR* Name) -> UEdGraphNode*
+        { for (UEdGraphNode* Node : Graph->Nodes) if (Node && Node->GetFName() == Name) return Node; return nullptr; };
+        auto* Begin = Find(TEXT("K2Node_Event_0"));
+        auto* Assembly = Find(TEXT("K2Node_InstancedStruct_0"));
+        auto* Getter = Find(TEXT("K2Node_VariableGet_0"));
+        auto* BeginPin = Begin ? Begin->FindPin(TEXT("then")) : nullptr;
+        auto* AssemblyPin = Assembly ? Assembly->FindPin(TEXT("execute")) : nullptr;
+        auto* InstancePin = Getter ? Getter->FindPin(TEXT("MetaHuman Instance")) : nullptr;
+        if (!BeginPin || !AssemblyPin || !InstancePin)
+        { OutError = TEXT("Stock BeginPlay/assembly/instance pins differ from the inspected graph"); return -1; }
+        if (auto* Existing = Cast<UK2Node_IfThenElse>(Find(TEXT("Carnival_InstanceReadyAtBeginPlay"))))
+        {
+            auto* Check = Cast<UK2Node_CallFunction>(Find(TEXT("Carnival_BeginPlayInstanceValid")));
+            if (Check && Check->GetTargetFunction() == UKismetSystemLibrary::StaticClass()->FindFunctionByName(TEXT("IsValid"))
+                && Check->FindPinChecked(TEXT("Object"))->LinkedTo.Contains(InstancePin)
+                && BeginPin->LinkedTo.Num() == 1 && BeginPin->LinkedTo[0] == Existing->GetExecPin()
+                && Existing->GetThenPin()->LinkedTo.Num() == 1 && Existing->GetThenPin()->LinkedTo[0] == AssemblyPin
+                && Existing->GetElsePin()->LinkedTo.IsEmpty()
+                && Existing->GetConditionPin()->LinkedTo.Contains(Check->GetReturnValuePin())) return 0;
+            OutError = TEXT("Existing crowd BeginPlay guard has unexpected connections"); return -1;
+        }
+        if (Find(TEXT("Carnival_BeginPlayInstanceValid")) || BeginPin->LinkedTo.Num() != 1 || BeginPin->LinkedTo[0] != AssemblyPin)
+        { OutError = TEXT("BeginPlay does not lead directly to the inspected assembly read"); return -1; }
+        auto* Function = UKismetSystemLibrary::StaticClass()->FindFunctionByName(TEXT("IsValid"));
+        if (!Function) { OutError = TEXT("Missing IsValid function"); return -1; }
+        Blueprint->Modify(); Graph->Modify(); Begin->Modify(); Assembly->Modify(); Getter->Modify();
+        auto* Check = NewObject<UK2Node_CallFunction>(Graph, TEXT("Carnival_BeginPlayInstanceValid"), RF_Transactional);
+        Graph->AddNode(Check, false, false); Check->CreateNewGuid(); Check->SetFromFunction(Function); Check->AllocateDefaultPins();
+        auto* Guard = NewObject<UK2Node_IfThenElse>(Graph, TEXT("Carnival_InstanceReadyAtBeginPlay"), RF_Transactional);
+        Graph->AddNode(Guard, false, false); Guard->CreateNewGuid(); Guard->AllocateDefaultPins();
+        Guard->NodeComment = TEXT("Mass assigns appearance after actor spawn. Assemble at BeginPlay only if an instance exists; the existing SetMetaHumanInstance event assembles delayed assignments.");
+        Guard->NodePosX = Begin->NodePosX + 230; Guard->NodePosY = Begin->NodePosY;
+        Check->NodePosX = Guard->NodePosX - 220; Check->NodePosY = Guard->NodePosY + 160;
+        InstancePin->MakeLinkTo(Check->FindPinChecked(TEXT("Object")));
+        Check->GetReturnValuePin()->MakeLinkTo(Guard->GetConditionPin());
+        BeginPin->BreakLinkTo(AssemblyPin); BeginPin->MakeLinkTo(Guard->GetExecPin()); Guard->GetThenPin()->MakeLinkTo(AssemblyPin);
+        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+        return 1;
+    }
+    OutError = TEXT("No EventGraph in the crowd actor"); return -1;
+}
+
+int32 UCarnivalCrowdEditorLibrary::RepairCrowdClothingPoseLink(UBlueprint* Blueprint, FString& OutError)
+{
+    OutError.Reset();
+    if (!Blueprint || Blueprint->GetOutermost()->GetName() != TEXT("/Game/Carnival/Crowd/Actors/BP_CarnivalCrowdActor"))
+    { OutError = TEXT("Expected the owned crowd actor"); return -1; }
+    TArray<UEdGraph*> Graphs; Blueprint->GetAllGraphs(Graphs);
+    for (UEdGraph* Graph : Graphs)
+    {
+        if (Graph->GetFName() != TEXT("EventGraph")) continue;
+        auto Find = [&](const TCHAR* Name) -> UEdGraphNode*
+        { for (UEdGraphNode* Node : Graph->Nodes) if (Node && Node->GetFName() == Name) return Node; return nullptr; };
+        auto* Leader = Cast<UK2Node_CallFunction>(Find(TEXT("K2Node_CallFunction_35")));
+        auto* Material = Cast<UK2Node_CallFunction>(Find(TEXT("K2Node_CallFunction_30")));
+        auto* Loop = Find(TEXT("K2Node_MapForEach_5"));
+        auto* Completed = Loop ? Loop->FindPin(TEXT("CompletedPin")) : nullptr;
+        auto* Execute = Leader ? Leader->FindPin(TEXT("execute")) : nullptr;
+        auto* Then = Material ? Material->FindPin(TEXT("then")) : nullptr;
+        auto* Empty = Find(TEXT("K2Node_Knot_26"));
+        auto* EmptyThen = Empty ? Empty->FindPin(TEXT("OutputPin")) : nullptr;
+        if (!Leader || Leader->GetTargetFunction() != USkinnedMeshComponent::StaticClass()->FindFunctionByName(TEXT("SetLeaderPoseComponent"))
+            || !Material || Material->GetTargetFunction() != UPrimitiveComponent::StaticClass()->FindFunctionByName(TEXT("SetMaterialByName"))
+            || !Completed || !Execute || !Then || !EmptyThen || Execute->LinkedTo.Num() != 2
+            || !Execute->LinkedTo.Contains(EmptyThen))
+        { OutError = TEXT("Clothing assignment graph differs from the inspected stock graph"); return -1; }
+        if (Completed->LinkedTo.Num() == 1 && Completed->LinkedTo[0] == Execute && Then->LinkedTo.IsEmpty()) return 0;
+        if (!Completed->LinkedTo.IsEmpty() || Then->LinkedTo.Num() != 1 || Then->LinkedTo[0] != Execute)
+        { OutError = TEXT("Unexpected clothing material completion connections"); return -1; }
+        Blueprint->Modify(); Graph->Modify(); Leader->Modify(); Material->Modify(); Loop->Modify();
+        Then->BreakLinkTo(Execute); Completed->MakeLinkTo(Execute);
+        Leader->NodeComment = TEXT("Link clothing to the body after material overrides finish, including an empty override map. Pooled appearance assignments refresh this link each time.");
+        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+        return 1;
+    }
+    OutError = TEXT("No crowd actor EventGraph"); return -1;
+}
+
+TArray<FVector> UCarnivalCrowdEditorLibrary::PreviewCrowdSpawnLocations(UWorld* World, FString& OutError)
+{
+    OutError.Reset();
+    TArray<FVector> Locations;
+    if (!World) { OutError = TEXT("No world"); return Locations; }
+    for (TActorIterator<AMassSpawner> It(World); It; ++It)
+    {
+        auto* TypesProperty = FindFProperty<FArrayProperty>(It->GetClass(), TEXT("EntityTypes"));
+        auto* GeneratorsProperty = FindFProperty<FArrayProperty>(It->GetClass(), TEXT("SpawnDataGenerators"));
+        if (!TypesProperty || !GeneratorsProperty) { OutError = TEXT("Missing spawner properties"); return {}; }
+        auto& Types = *TypesProperty->ContainerPtrToValuePtr<TArray<FMassSpawnedEntityType>>(*It);
+        auto& Generators = *GeneratorsProperty->ContainerPtrToValuePtr<TArray<FMassSpawnDataGenerator>>(*It);
+        for (const auto& Generator : Generators)
+        {
+            if (!Generator.GeneratorInstance) { OutError = TEXT("Missing generator"); return {}; }
+            if (Generator.GeneratorInstance->GetClass() != UMassEntityZoneGraphSpawnPointsGenerator::StaticClass()
+                && Generator.GeneratorInstance->GetClass() != UCarnivalCrowdSpawnGenerator::StaticClass())
+            { OutError = TEXT("Preview supports only reviewed synchronous lane generators"); return {}; }
+            bool bFinished = false;
+            auto Callback = FFinishedGeneratingSpawnDataSignature::CreateLambda([&](TConstArrayView<FMassEntitySpawnDataGeneratorResult> Results)
+            {
+                bFinished = true;
+                for (const auto& Result : Results)
+                    if (const auto* Transforms = Result.SpawnData.GetPtr<FMassTransformsSpawnData>())
+                        for (const auto& Transform : Transforms->Transforms) Locations.Add(Transform.GetLocation());
+            });
+            Generator.GeneratorInstance->Generate(**It, Types, It->GetCount(), Callback);
+            if (!bFinished) { OutError = TEXT("Preview requires a synchronous generator"); return {}; }
+        }
+    }
+    return Locations;
+}
+
+bool UCarnivalCrowdEditorLibrary::ConfigureDistinctCrowdSpawnPositions(AActor* Spawner, FString& OutError)
+{
+    OutError.Reset();
+    auto* MassSpawner = Cast<AMassSpawner>(Spawner);
+    if (!MassSpawner || Spawner->GetFName() != TEXT("AMetaHumanCarnivalCrowdSpawner"))
+    { OutError = TEXT("Expected the owned Carnival Mass spawner"); return false; }
+    auto* Property = FindFProperty<FArrayProperty>(Spawner->GetClass(), TEXT("SpawnDataGenerators"));
+    if (!Property) { OutError = TEXT("Missing generators property"); return false; }
+    auto& Generators = *Property->ContainerPtrToValuePtr<TArray<FMassSpawnDataGenerator>>(Spawner);
+    if (Generators.Num() != 1 || Generators[0].Proportion != 1.f)
+    { OutError = TEXT("Expected one full-density generator"); return false; }
+    auto& Generator = Generators[0];
+    if (!Generator.GeneratorInstance || (Generator.GeneratorInstance->GetClass() != UMassEntityZoneGraphSpawnPointsGenerator::StaticClass()
+        && Generator.GeneratorInstance->GetClass() != UCarnivalCrowdSpawnGenerator::StaticClass()))
+    { OutError = TEXT("Unexpected existing generator"); return false; }
+    Spawner->Modify();
+    if (!Generator.GeneratorInstance->IsA<UCarnivalCrowdSpawnGenerator>())
+        Generator.GeneratorInstance = NewObject<UCarnivalCrowdSpawnGenerator>(Spawner, TEXT("CarnivalDistinctLaneSpawnGenerator"), RF_Transactional);
+    Generator.GeneratorClass = UCarnivalCrowdSpawnGenerator::StaticClass();
+    Spawner->MarkPackageDirty();
+    return true;
+}
+
+TArray<FString> UCarnivalCrowdEditorLibrary::DescribeCrowdLanes(UWorld* World)
+{
+    TArray<FString> Result;
+    const auto* Graph = World ? World->GetSubsystem<UZoneGraphSubsystem>() : nullptr;
+    if (!Graph) return Result;
+    for (const auto& Registered : Graph->GetRegisteredZoneGraphData())
+    {
+        if (!Registered.bInUse || !Registered.ZoneGraphData) continue;
+        const auto& Storage = Registered.ZoneGraphData->GetStorage();
+        for (int32 Index = 0; Index < Storage.Lanes.Num(); ++Index)
+        {
+            float Length = 0;
+            UE::ZoneGraph::Query::GetLaneLength(Storage, Index, Length);
+            const auto& Lane = Storage.Lanes[Index];
+            Result.Add(FString::Printf(TEXT("Lane=%d Width=%.2f Length=%.2f Start=%s End=%s"), Index, Lane.Width, Length,
+                *Storage.LanePoints[Lane.PointsBegin].ToString(), *Storage.LanePoints[Lane.PointsEnd-1].ToString()));
+        }
+    }
+    return Result;
+}
 
 TArray<FString> UCarnivalCrowdEditorLibrary::DescribeLiveMassSimulation(UWorld* World)
 {
@@ -152,6 +351,69 @@ TArray<FString> UCarnivalCrowdEditorLibrary::DescribeLiveMassSimulation(UWorld* 
 #else
     Result.Add(TEXT("Entity debug census unavailable in this build"));
 #endif
+    return Result;
+}
+
+TArray<FCarnivalCrowdEntitySample> UCarnivalCrowdEditorLibrary::SampleLiveCrowdEntities(UWorld* World)
+{
+    TArray<FCarnivalCrowdEntitySample> Result;
+    auto* Subsystem = World ? World->GetSubsystem<UMassEntitySubsystem>() : nullptr;
+    if (!Subsystem) return Result;
+    FMassEntityManager& Manager = Subsystem->GetMutableEntityManager();
+    UMetaHumanMassRepresentationSubsystem* MetaHumanSubsystem = World->GetSubsystem<UMetaHumanMassRepresentationSubsystem>();
+    FMassEntityQuery Query(Manager.AsShared());
+    Query.AddTagRequirement<FMassCrowdTag>(EMassFragmentPresence::All);
+    Query.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+    Query.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+    Query.AddRequirement<FMassZoneGraphLaneLocationFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+    Query.AddRequirement<FMassStateTreeInstanceFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+    Query.AddRequirement<FAgentRadiusFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+    Query.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+    Query.AddRequirement<FMetaHumanMassIdentityFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+    Query.AddRequirement<FMassRepresentationFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+    auto Context = Manager.CreateExecutionContext(0.f);
+    Context.SetFlushDeferredCommands(false);
+    Query.ForEachEntityChunk(Context, [&](FMassExecutionContext& Chunk)
+    {
+        const auto Transforms = Chunk.GetFragmentView<FTransformFragment>();
+        const auto Velocities = Chunk.GetFragmentView<FMassVelocityFragment>();
+        const auto Lanes = Chunk.GetFragmentView<FMassZoneGraphLaneLocationFragment>();
+        const auto Behaviors = Chunk.GetFragmentView<FMassStateTreeInstanceFragment>();
+        const auto Radii = Chunk.GetFragmentView<FAgentRadiusFragment>();
+        const auto Targets = Chunk.GetFragmentView<FMassMoveTargetFragment>();
+        const auto Identities = Chunk.GetFragmentView<FMetaHumanMassIdentityFragment>();
+        const auto Representations = Chunk.GetFragmentView<FMassRepresentationFragment>();
+        for (auto It = Chunk.CreateEntityIterator(); It; ++It)
+        {
+            auto& Sample = Result.AddDefaulted_GetRef();
+            const auto Entity = Chunk.GetEntity(It);
+            Sample.EntityIndex = Entity.Index;
+            Sample.EntitySerial = Entity.SerialNumber;
+            if (!Identities.IsEmpty() && MetaHumanSubsystem)
+            {
+                if (UMetaHumanInstance* Instance = MetaHumanSubsystem->GetInstanceForHandle(
+                    FMetaHumanCrowdAppearanceHandle(Identities[It].AppearanceIndex)))
+                    Sample.AppearanceSource = Instance->GetPathName();
+            }
+            if (!Representations.IsEmpty()) Sample.RepresentationType = static_cast<int32>(Representations[It].CurrentRepresentation);
+            Sample.Location = Transforms[It].GetTransform().GetLocation();
+            if (!Velocities.IsEmpty()) Sample.Velocity = Velocities[It].Value;
+            if (!Lanes.IsEmpty() && Lanes[It].LaneHandle.IsValid())
+            {
+                Sample.LaneIndex = Lanes[It].LaneHandle.Index;
+                Sample.LaneDistance = Lanes[It].DistanceAlongLane;
+            }
+            Sample.bBehaviorActive = !Behaviors.IsEmpty() && Behaviors[It].InstanceHandle.IsValid();
+            if (!Radii.IsEmpty()) Sample.AgentRadius = Radii[It].Radius;
+            Sample.bInAvoidanceGrid = Chunk.DoesArchetypeHaveTag<FMassInNavigationObstacleGridTag>();
+            if (!Targets.IsEmpty())
+            {
+                Sample.MovementAction = static_cast<int32>(Targets[It].GetCurrentAction());
+                Sample.bSteeringFallingBehind = Targets[It].bSteeringFallingBehind;
+            }
+        }
+    });
+    Result.Sort([](const auto& A, const auto& B) { return A.EntityIndex < B.EntityIndex; });
     return Result;
 }
 
@@ -608,7 +870,7 @@ AActor* UCarnivalCrowdEditorLibrary::PlaceInitializedMetaHumanActor(
     const FString& ActorLabel,
     const FVector& Location,
     const FRotator& Rotation,
-    FString& OutError)
+    FString& OutError, bool UseOwnedCrowdActor)
 {
     OutError.Reset();
     if (!Instance)
@@ -619,7 +881,9 @@ AActor* UCarnivalCrowdEditorLibrary::PlaceInitializedMetaHumanActor(
 
     const UMetaHumanCollection* Collection = Instance->GetMetaHumanCollection();
     const UMetaHumanCollectionPipeline* Pipeline = Collection ? Collection->GetPipeline() : nullptr;
-    const TSubclassOf<AActor> ActorClass = Pipeline ? Pipeline->GetActorClass() : nullptr;
+    TSubclassOf<AActor> ActorClass = Pipeline ? Pipeline->GetActorClass() : nullptr;
+    if (UseOwnedCrowdActor)
+        ActorClass = StaticLoadClass(AActor::StaticClass(), nullptr, TEXT("/Game/Carnival/Crowd/Actors/BP_CarnivalCrowdActor.BP_CarnivalCrowdActor_C"));
     if (!ActorClass || !ActorClass->ImplementsInterface(UMetaHumanCharacterActorInterface::StaticClass()))
     {
         OutError = TEXT("The MetaHuman Collection pipeline has no actor class implementing MetaHumanCharacterActorInterface.");
@@ -748,10 +1012,10 @@ UMassEntityConfigAsset* UCarnivalCrowdEditorLibrary::CreateMetaHumanMassEntityCo
         return nullptr;
     }
 
-    UClass* CrowdActorClass = StaticLoadClass(AActor::StaticClass(), nullptr, TEXT("/MetaHumanCrowd/BP_CrowdActor.BP_CrowdActor_C"));
+    UClass* CrowdActorClass = StaticLoadClass(AActor::StaticClass(), nullptr, TEXT("/Game/Carnival/Crowd/Actors/BP_CarnivalCrowdActor.BP_CarnivalCrowdActor_C"));
     if (!CrowdActorClass)
     {
-        OutError = TEXT("Could not load UE 5.8's BP_CrowdActor class.");
+        OutError = TEXT("Could not load the guarded Carnival crowd actor. Run repair_crowd_actor_begin_play.py first.");
         return nullptr;
     }
 
@@ -782,6 +1046,8 @@ UMassEntityConfigAsset* UCarnivalCrowdEditorLibrary::CreateMetaHumanMassEntityCo
         }
     }
     Visualization->HighResTemplateActor = CrowdActorClass;
+    // The stock MetaHuman trait requests actor representations at both near LODs.
+    Visualization->LowResTemplateActor = CrowdActorClass;
 
     if (!Config->AddTrait(UMassCrowdMemberTrait::StaticClass()))
     {
@@ -791,6 +1057,82 @@ UMassEntityConfigAsset* UCarnivalCrowdEditorLibrary::CreateMetaHumanMassEntityCo
 
     Config->MarkPackageDirty();
     return Config;
+}
+
+UStateTree* UCarnivalCrowdEditorLibrary::ConfigureCrowdRoaming(UMassEntityConfigAsset* Config, const FString& BehaviorPackage, FString& OutError)
+{
+    OutError.Reset();
+    if (!Config || !BehaviorPackage.StartsWith(TEXT("/Game/Carnival/Crowd/Behavior/")))
+    {
+        OutError = TEXT("Expected an owned Carnival crowd behavior package and an entity config.");
+        return nullptr;
+    }
+    UStateTree* Tree = CarnivalCrowdEditorPrivate::FindOrCreateAsset<UStateTree>(BehaviorPackage, OutError);
+    if (!Tree) return nullptr;
+    Tree->Modify();
+    auto* Data = NewObject<UStateTreeEditorData>(Tree, NAME_None, RF_Transactional);
+    Tree->EditorData = Data;
+    Data->Schema = NewObject<UMassStateTreeSchema>(Data, NAME_None, RF_Transactional);
+    auto& Root = Data->AddRootState();
+    auto& Roam = Root.AddChildState(TEXT("Walk the midway"));
+    auto& Pause = Root.AddChildState(TEXT("Look around"));
+    Roam.AddTask<FCarnivalCrowdRoamTask>();
+    Pause.AddTask<FMassZoneGraphStandTask>().GetInstanceData().Duration = 1.5f;
+    Roam.AddTransition(EStateTreeTransitionTrigger::OnStateCompleted, EStateTreeTransitionType::GotoState, &Pause);
+    Pause.AddTransition(EStateTreeTransitionTrigger::OnStateCompleted, EStateTreeTransitionType::GotoState, &Roam);
+    FStateTreeCompilerLog Log;
+    FStateTreeCompiler Compiler(Log);
+    if (!Compiler.Compile(*Tree) || !Tree->IsReadyToRun())
+    {
+        Log.DumpToLog(LogTemp);
+        OutError = TEXT("Guest roaming StateTree failed compilation; the entity config was not changed.");
+        return nullptr;
+    }
+    Config->Modify();
+    for (UClass* TraitClass : { UCarnivalCrowdNavigationPrerequisiteTrait::StaticClass(), UMassMovementTrait::StaticClass(),
+        UMassSteeringTrait::StaticClass(), UMassZoneGraphNavigationTrait::StaticClass(), UMassObstacleAvoidanceTrait::StaticClass(),
+        UMassNavigationObstacleTrait::StaticClass(), UMassSmoothOrientationTrait::StaticClass() })
+    {
+        if (!Config->AddTrait(TraitClass))
+        {
+            OutError = FString::Printf(TEXT("Could not add required roaming trait %s."), *TraitClass->GetName());
+            return nullptr;
+        }
+    }
+    auto* AvoidanceTrait = Config->AddTrait(UMassObstacleAvoidanceTrait::StaticClass());
+    auto* MovingProperty = FindFProperty<FStructProperty>(AvoidanceTrait->GetClass(), TEXT("MovingParameters"));
+    auto* StandingProperty = FindFProperty<FStructProperty>(AvoidanceTrait->GetClass(), TEXT("StandingParameters"));
+    if (!MovingProperty || MovingProperty->Struct != FMassMovingAvoidanceParameters::StaticStruct()
+        || !StandingProperty || StandingProperty->Struct != FMassStandingAvoidanceParameters::StaticStruct())
+    {
+        OutError = TEXT("Crowd avoidance parameters are unavailable."); return nullptr;
+    }
+    auto* Moving = MovingProperty->ContainerPtrToValuePtr<FMassMovingAvoidanceParameters>(AvoidanceTrait);
+    // Lane junctions and short stop/start paths must retain personal space.
+    Moving->StartOfPathAvoidanceScale = 1.f;
+    Moving->EndOfPathAvoidanceScale = 1.f;
+    Moving->StandingObstacleAvoidanceScale = 1.f;
+    Moving->SeparationRadiusScale = 1.f;
+    Moving->PredictiveAvoidanceRadiusScale = 1.f;
+    Moving->ObstacleSeparationStiffness = 500.f;
+    auto* Standing = StandingProperty->ContainerPtrToValuePtr<FMassStandingAvoidanceParameters>(AvoidanceTrait);
+    Standing->GhostSeparationRadiusScale = 1.f;
+    Standing->GhostSeparationDistance = 40.f;
+    auto* NavigationTrait = Config->AddTrait(UMassZoneGraphNavigationTrait::StaticClass());
+    auto* ParametersProperty = FindFProperty<FStructProperty>(NavigationTrait->GetClass(), TEXT("NavigationParameters"));
+    if (!ParametersProperty || ParametersProperty->Struct != FMassZoneGraphNavigationParameters::StaticStruct())
+    {
+        OutError = TEXT("ZoneGraph navigation parameters are unavailable."); return nullptr;
+    }
+    auto* Parameters = ParametersProperty->ContainerPtrToValuePtr<FMassZoneGraphNavigationParameters>(NavigationTrait);
+    Parameters->LaneFilter.AllTags = FZoneGraphTagMask(1);
+    auto* BehaviorTrait = Config->AddTrait(UMassStateTreeTrait::StaticClass());
+    auto* Property = BehaviorTrait ? FindFProperty<FObjectPropertyBase>(BehaviorTrait->GetClass(), TEXT("StateTree")) : nullptr;
+    if (!Property) { OutError = TEXT("Mass StateTree trait is unavailable."); return nullptr; }
+    Property->SetObjectPropertyValue_InContainer(BehaviorTrait, Tree);
+    Config->MarkPackageDirty();
+    Tree->MarkPackageDirty();
+    return Tree;
 }
 
 AActor* UCarnivalCrowdEditorLibrary::PlaceMetaHumanMassSpawner(
@@ -878,8 +1220,8 @@ AActor* UCarnivalCrowdEditorLibrary::PlaceMetaHumanMassSpawner(
     }
     Generators->Reset();
     FMassSpawnDataGenerator& Generator = Generators->AddDefaulted_GetRef();
-    Generator.GeneratorClass = UMassEntityZoneGraphSpawnPointsGenerator::StaticClass();
-    Generator.GeneratorInstance = NewObject<UMassEntityZoneGraphSpawnPointsGenerator>(Spawner, TEXT("CarnivalZoneGraphSpawnPointsGenerator"), RF_Transactional);
+    Generator.GeneratorClass = UCarnivalCrowdSpawnGenerator::StaticClass();
+    Generator.GeneratorInstance = NewObject<UCarnivalCrowdSpawnGenerator>(Spawner, TEXT("CarnivalDistinctLaneSpawnGenerator"), RF_Transactional);
     Generator.Proportion = 1.0f;
 
     Spawner->MarkPackageDirty();

@@ -17,6 +17,10 @@
 #include "CarnivalActivityBase.h"
 #include "CarnivalLadder.h"
 #include "CarnivalMissionInteractionActor.h"
+#include "CarnivalDoorSubsystem.h"
+#include "CarnivalWaterVolume.h"
+#include "CarnivalCharacterMovementComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "CarnivalRideAttendant.h"
 #include "CarnivalRidePassengerComponent.h"
 #include "CarnivalRideSeatComponent.h"
@@ -27,7 +31,8 @@
 #include "GameFramework/WorldSettings.h"
 #include "Components/CapsuleComponent.h"
 
-ACarnivalPlayerCharacter::ACarnivalPlayerCharacter()
+ACarnivalPlayerCharacter::ACarnivalPlayerCharacter(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer.SetDefaultSubobjectClass<UCarnivalCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
 	PrimaryActorTick.bCanEverTick = true;
 
@@ -69,6 +74,21 @@ ACarnivalPlayerCharacter::ACarnivalPlayerCharacter()
 	CrouchSpeed = 220.0f;
 	ProneSpeed = 120.0f;
 	SwimSpeed = 300.0f;
+	GetCharacterMovement()->MaxSwimSpeed = SwimSpeed;
+	SwimIdleAnimation = TSoftObjectPtr<UAnimSequence>(FSoftObjectPath(TEXT("/Game/Carnival/Character/Animations/Swim/anim_SwimIdle.anim_SwimIdle")));
+	SwimForwardAnimation = TSoftObjectPtr<UAnimSequence>(FSoftObjectPath(TEXT("/Game/Carnival/Character/Animations/Swim/anim_Swim_Surface_Fwd.anim_Swim_Surface_Fwd")));
+	SwimLeftAnimation = TSoftObjectPtr<UAnimSequence>(FSoftObjectPath(TEXT("/Game/Carnival/Character/Animations/Swim/anim_Swim_Surface_Left.anim_Swim_Surface_Left")));
+	SwimRightAnimation = TSoftObjectPtr<UAnimSequence>(FSoftObjectPath(TEXT("/Game/Carnival/Character/Animations/Swim/anim_Swim_Surface_Right.anim_Swim_Surface_Right")));
+	UnderwaterPostProcessMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Carnival/World/Materials/Water/M_CarnivalUnderwaterPP.M_CarnivalUnderwaterPP")));
+	GetCharacterMovement()->Buoyancy = 1.0f;
+	// Off until the camera is inside water; the settings below are the underwater grade.
+	FollowCamera->PostProcessBlendWeight = 0.0f;
+	FollowCamera->PostProcessSettings.bOverride_ColorSaturation = true;
+	FollowCamera->PostProcessSettings.ColorSaturation = FVector4(0.75f, 0.85f, 0.95f, 1.0f);
+	FollowCamera->PostProcessSettings.bOverride_ColorGain = true;
+	FollowCamera->PostProcessSettings.ColorGain = FVector4(0.7f, 0.95f, 1.05f, 1.0f);
+	FollowCamera->PostProcessSettings.bOverride_VignetteIntensity = true;
+	FollowCamera->PostProcessSettings.VignetteIntensity = 0.65f;
 	RollLandingVelocityThreshold = -900.0f;
 
 	LocomotionState = ECarnivalLocomotionState::Jogging;
@@ -106,10 +126,15 @@ void ACarnivalPlayerCharacter::Tick(float DeltaTime)
     if (IsUsingRide())
     {
         BlockedInputDuration = SwimmingDuration = FallingDuration = 0.f;
+        UpdateSwimAnimation();
+        UpdateUnderwaterLook();
         return;
     }
 
+	UpdateWaterMovement(DeltaTime);
 	UpdateSafeRecoveryState(DeltaTime);
+	UpdateSwimAnimation();
+	UpdateUnderwaterLook();
 
 	// Update movement state based on movement component
 	if (LocomotionState != ECarnivalLocomotionState::RidingMotorcycle &&
@@ -184,7 +209,10 @@ void ACarnivalPlayerCharacter::UpdateSafeRecoveryState(float DeltaTime)
 
 	const bool bSwimming = Movement->IsSwimming() || Movement->IsInWater();
 	const bool bFalling = Movement->IsFalling();
-	SwimmingDuration = bSwimming ? SwimmingDuration + DeltaTime : 0.f;
+	// Authored swimming water (river, flooded Atlantis) is meant to be swum in, so it does not count as being
+	// stranded; the pause menu's Return to path still gets the player out. Other water still offers recovery.
+	const bool bAuthoredWater = Cast<ACarnivalWaterVolume>(Movement->GetPhysicsVolume()) != nullptr;
+	SwimmingDuration = bSwimming && !bAuthoredWater ? SwimmingDuration + DeltaTime : 0.f;
 	FallingDuration = bFalling ? FallingDuration + DeltaTime : 0.f;
 
 	const FVector Acceleration = Movement->GetCurrentAcceleration();
@@ -236,7 +264,21 @@ bool ACarnivalPlayerCharacter::CanRecoverToSafePosition() const
 		|| bBelowKillPlane;
 }
 
+void ACarnivalPlayerCharacter::ResetRecoveryAfterLoad()
+{
+	LastSafeRecoveryLocation = GetActorLocation();
+	LastSafeRecoveryRotation = FRotator(0.f, GetActorRotation().Yaw, 0.f);
+	bHasSafeRecoveryLocation = true;
+	BlockedInputDuration = SwimmingDuration = FallingDuration = 0.f;
+	SafeLocationRefreshTime = 0.f;
+}
+
 bool ACarnivalPlayerCharacter::FindSafeRecoveryLocation(FVector& OutLocation) const
+{
+	return FindClearStandingLocation(LastSafeRecoveryLocation, OutLocation);
+}
+
+bool ACarnivalPlayerCharacter::FindClearStandingLocation(const FVector& Around, FVector& OutLocation) const
 {
 	if (!GetWorld() || !GetCapsuleComponent() || !GetCharacterMovement()) return false;
 
@@ -253,7 +295,7 @@ bool ACarnivalPlayerCharacter::FindSafeRecoveryLocation(FVector& OutLocation) co
 
 	for (const FVector& Offset : Offsets)
 	{
-		const FVector Sample = LastSafeRecoveryLocation + Offset;
+		const FVector Sample = Around + Offset;
 		const FVector TraceStart = Sample + FVector(0.f, 0.f, 80.f);
 		const FVector TraceEnd = Sample - FVector(0.f, 0.f, HalfHeight + 130.f);
 		FHitResult FloorHit;
@@ -265,8 +307,7 @@ bool ACarnivalPlayerCharacter::FindSafeRecoveryLocation(FVector& OutLocation) co
 		}
 
 		const FVector Candidate(FloorHit.ImpactPoint.X, FloorHit.ImpactPoint.Y, FloorHit.ImpactPoint.Z + HalfHeight + 2.f);
-		if (GetWorld()->OverlapBlockingTestByChannel(Candidate, LastSafeRecoveryRotation.Quaternion(), ECC_Pawn,
-			StandingCapsule, QueryParams))
+		if (GetWorld()->OverlapBlockingTestByChannel(Candidate, FQuat::Identity, ECC_Pawn, StandingCapsule, QueryParams))
 		{
 			continue;
 		}
@@ -283,7 +324,45 @@ bool ACarnivalPlayerCharacter::TryRecoverToSafePosition()
 
 	FVector RecoveryLocation;
 	if (!FindSafeRecoveryLocation(RecoveryLocation)) return false;
+	return StandAndTeleport(RecoveryLocation, LastSafeRecoveryRotation);
+}
 
+const FName ACarnivalPlayerCharacter::RouteAnchorTag(TEXT("CarnivalRouteAnchor"));
+
+bool ACarnivalPlayerCharacter::ReturnToNearestRoute()
+{
+	if (!GetWorld() || IsUsingRide() || MountedMotorcycle || MountedBoat || MountedHovercraft
+		|| IsParkourTraversing() || ActiveActivity)
+	{
+		return false;
+	}
+
+	TArray<AActor*> Anchors;
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		if (It->ActorHasTag(RouteAnchorTag)) Anchors.Add(*It);
+	}
+	const FVector Here = GetActorLocation();
+	Anchors.Sort([&Here](const AActor& A, const AActor& B)
+	{
+		return FVector::DistSquared(A.GetActorLocation(), Here) < FVector::DistSquared(B.GetActorLocation(), Here);
+	});
+
+	// The nearest anchor can be momentarily occupied (a vehicle, a guest); try a few.
+	for (int32 Index = 0; Index < FMath::Min(Anchors.Num(), 8); ++Index)
+	{
+		FVector Location;
+		if (FindClearStandingLocation(Anchors[Index]->GetActorLocation(), Location)
+			&& StandAndTeleport(Location, FRotator(0.f, Anchors[Index]->GetActorRotation().Yaw, 0.f)))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool ACarnivalPlayerCharacter::StandAndTeleport(const FVector& Location, const FRotator& Rotation)
+{
 	if (bIsCrouched) UnCrouch();
 	bIsProne = false;
 	GetCapsuleComponent()->SetCapsuleSize(DefaultCapsuleRadius, DefaultCapsuleHalfHeight, true);
@@ -292,15 +371,13 @@ bool ACarnivalPlayerCharacter::TryRecoverToSafePosition()
 	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
 	ConsumeMovementInputVector();
 
-	const bool bMoved = SetActorLocationAndRotation(RecoveryLocation, LastSafeRecoveryRotation,
-		false, nullptr, ETeleportType::TeleportPhysics);
-	if (!bMoved) return false;
+	if (!SetActorLocationAndRotation(Location, Rotation, false, nullptr, ETeleportType::TeleportPhysics)) return false;
 
 	SetLocomotionState(ECarnivalLocomotionState::Jogging);
 	GetCharacterMovement()->MaxWalkSpeed = JogSpeed;
 	BlockedInputDuration = SwimmingDuration = FallingDuration = 0.f;
-	LastSafeRecoveryLocation = RecoveryLocation;
-	LastSafeRecoveryRotation = FRotator(0.f, GetActorRotation().Yaw, 0.f);
+	LastSafeRecoveryLocation = Location;
+	LastSafeRecoveryRotation = FRotator(0.f, Rotation.Yaw, 0.f);
 	bHasSafeRecoveryLocation = true;
 	return true;
 }
@@ -687,7 +764,177 @@ void ACarnivalPlayerCharacter::TryContextInteract()
 		NearbyActivity->StartActivity(this);
 		return;
 	}
+	if (AActor* Door = FindNearbyDoor())
+	{
+		GetWorld()->GetSubsystem<UCarnivalDoorSubsystem>()->ToggleDoor(Door, GetActorLocation());
+		return;
+	}
 	InteractWithRideOperator();
+}
+
+AActor* ACarnivalPlayerCharacter::FindNearbyDoor() const
+{
+	if (LocomotionState != ECarnivalLocomotionState::Walking && LocomotionState != ECarnivalLocomotionState::Jogging
+		&& LocomotionState != ECarnivalLocomotionState::Sprinting && LocomotionState != ECarnivalLocomotionState::Crouching) return nullptr;
+	const UCarnivalDoorSubsystem* Doors = GetWorld() ? GetWorld()->GetSubsystem<UCarnivalDoorSubsystem>() : nullptr;
+	return Doors ? Doors->FindDoorNear(GetActorLocation()) : nullptr;
+}
+
+bool ACarnivalPlayerCharacter::IsInWaterVolume() const
+{
+	return GetCharacterMovement() && GetCharacterMovement()->IsInWater();
+}
+
+void ACarnivalPlayerCharacter::UpdateWaterMovement(float DeltaTime)
+{
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	const APhysicsVolume* Volume = Move->GetPhysicsVolume();
+	const ACarnivalWaterVolume* Water = Cast<ACarnivalWaterVolume>(Volume);
+	const bool bInWater = Volume && Volume->bWaterVolume;
+	const float HalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	bSubmerged = bInWater && (!Water || GetActorLocation().Z + HalfHeight < Water->GetSurfaceZ() - 5.f);
+	const bool bWasSeabed = bSeabedWalking;
+	bSeabedWalking = false;
+	if (bClimbingOut)
+	{
+		if (!Move->IsFalling()) bClimbingOut = false;
+		else if (GetActorLocation().Z - HalfHeight > ClimbOutLedgeZ + 5.f)
+		{
+			Move->Velocity.X = ClimbOutDirection.X * 250.f;
+			Move->Velocity.Y = ClimbOutDirection.Y * 250.f;
+			bClimbingOut = false;
+		}
+	}
+	// The held swim inputs are cleared by their button release, not here: a swimmer bobbing at the surface
+	// briefly leaves the water and must keep rising when it falls back in.
+	if (IsUsingRide())
+	{
+		bSwimUpHeld = bSwimDownHeld = false;
+	}
+	else if (!bInWater || IsParkourTraversing())
+	{
+	}
+	else if (Move->IsSwimming())
+	{
+		if (bSwimUpHeld) AddMovementInput(FVector::UpVector, 1.f);
+		else if (bSwimDownHeld) AddMovementInput(FVector::DownVector, 1.f);
+		else if (Water)
+		{
+			// Near the surface an idle swimmer floats with the head out; deeper down it settles to the bottom.
+			const float Top = GetActorLocation().Z + HalfHeight;
+			const float Surface = Water->GetSurfaceZ();
+			const float Target = Top > Surface - 150.f
+				? FMath::Clamp((Surface + 25.f - Top) * 1.5f, -150.f, 150.f)
+				: -SeabedSinkSpeed;
+			Move->Velocity.Z = FMath::FInterpTo(Move->Velocity.Z, Target, DeltaTime, 3.f);
+		}
+
+		// At the surface, swimming into a low ledge (a jetty, boarding float or bank lip) climbs out onto it.
+		const FVector Push = Move->GetCurrentAcceleration().GetSafeNormal2D();
+		ClimbOutCooldown = FMath::Max(0.f, ClimbOutCooldown - DeltaTime);
+		if (Water && !bSubmerged && !Push.IsNearlyZero() && ClimbOutCooldown <= 0.f)
+		{
+			const float Surface = Water->GetSurfaceZ();
+			const float Radius = GetCapsuleComponent()->GetScaledCapsuleRadius();
+			const FVector Probe = GetActorLocation() + Push * (Radius + 45.f);
+			FCollisionQueryParams Params(SCENE_QUERY_STAT(SwimClimbOut), false, this);
+			FHitResult Ledge;
+			if (GetWorld()->LineTraceSingleByChannel(Ledge, FVector(Probe.X, Probe.Y, Surface + 160.f), FVector(Probe.X, Probe.Y, Surface - 30.f), ECC_Visibility, Params)
+				&& Ledge.ImpactNormal.Z >= Move->GetWalkableFloorZ()
+				&& Ledge.ImpactPoint.Z > GetActorLocation().Z - HalfHeight + Move->MaxStepHeight)
+			{
+				const FVector Stand = Ledge.ImpactPoint + FVector(0.f, 0.f, HalfHeight + 5.f);
+				if (!GetWorld()->OverlapBlockingTestByChannel(Stand, FQuat::Identity, ECC_Pawn, FCollisionShape::MakeCapsule(Radius, HalfHeight), Params))
+				{
+					// Rise straight up first; the step forward onto the ledge follows once the feet clear it.
+					const float Rise = FMath::Max(0.f, Stand.Z - GetActorLocation().Z) + 40.f;
+					Move->SetMovementMode(MOVE_Falling);
+					LaunchCharacter(FVector::UpVector * FMath::Sqrt(2.f * FMath::Abs(Move->GetGravityZ()) * Rise), true, true);
+					bClimbingOut = true;
+					ClimbOutLedgeZ = Ledge.ImpactPoint.Z;
+					ClimbOutDirection = Push;
+					ClimbOutCooldown = 0.75f;
+					return;
+				}
+			}
+		}
+
+		// Settle onto the bottom (or wade out at a bank) when there is walkable ground right underfoot.
+		if (!bSwimUpHeld && Move->Velocity.Z <= 10.f && (bSubmerged || Move->ImmersionDepth() < 0.6f))
+		{
+			FFindFloorResult Floor;
+			Move->FindFloor(GetActorLocation(), Floor, false);
+			if (Floor.IsWalkableFloor() && Floor.FloorDist < 25.f)
+			{
+				Move->SetMovementMode(MOVE_Walking);
+			}
+		}
+	}
+	else if (Move->IsMovingOnGround())
+	{
+		bSeabedWalking = bSubmerged;
+		if (bSubmerged && bSwimUpHeld)
+		{
+			Move->SetMovementMode(MOVE_Swimming);
+			Move->Velocity.Z = 220.f;
+			bSeabedWalking = false;
+		}
+	}
+	else if (Move->IsFalling() && bSubmerged)
+	{
+		// Swim inputs take over a fall; otherwise stepping off a ledge on the bottom sinks as a slow fall.
+		if (bSwimUpHeld || bSwimDownHeld) Move->SetMovementMode(MOVE_Swimming);
+		else bSeabedFalling = true;
+	}
+
+	if (bSeabedFalling && !(Move->IsFalling() && bSubmerged)) bSeabedFalling = false;
+	if (bSeabedFalling && !bSeabedGravityApplied) { LandGravityScale = Move->GravityScale; Move->GravityScale *= 0.35f; bSeabedGravityApplied = true; }
+	else if (!bSeabedFalling && bSeabedGravityApplied) { Move->GravityScale = LandGravityScale; bSeabedGravityApplied = false; }
+
+	// Slow, heavy steps on the bottom; the land speed comes back on leaving it.
+	if (bSeabedWalking && !bWasSeabed) LandWalkSpeed = Move->MaxWalkSpeed;
+	if (bSeabedWalking) Move->MaxWalkSpeed = FMath::Min(SeabedWalkSpeed, LandWalkSpeed > 0.f ? LandWalkSpeed : SeabedWalkSpeed);
+	else if (bWasSeabed && LandWalkSpeed > 0.f) Move->MaxWalkSpeed = LandWalkSpeed;
+}
+
+void ACarnivalPlayerCharacter::UpdateUnderwaterLook()
+{
+	if (!FollowCamera) return;
+	const ACarnivalWaterVolume* Water = ACarnivalWaterVolume::FindAt(GetWorld(), FollowCamera->GetComponentLocation());
+	bCameraUnderwater = Water && Water->bWaterVolume;
+	if (bCameraUnderwater && !UnderwaterLookMaterial)
+	{
+		if (UMaterialInterface* Base = UnderwaterPostProcessMaterial.LoadSynchronous())
+		{
+			UnderwaterLookMaterial = UMaterialInstanceDynamic::Create(Base, this);
+			FollowCamera->PostProcessSettings.WeightedBlendables.Array.Add(FWeightedBlendable(1.f, UnderwaterLookMaterial));
+		}
+	}
+	if (bCameraUnderwater && UnderwaterLookMaterial)
+	{
+		UnderwaterLookMaterial->SetScalarParameterValue(TEXT("FogKeepPerMetre"), FMath::Exp(-Water->UnderwaterFogPerMetre));
+		UnderwaterLookMaterial->SetVectorParameterValue(TEXT("FogColor"), Water->UnderwaterFogColor);
+		UnderwaterLookMaterial->SetScalarParameterValue(TEXT("SurfaceZ"), Water->GetSurfaceZ());
+	}
+	FollowCamera->PostProcessBlendWeight = bCameraUnderwater ? 1.f : 0.f;
+}
+
+void ACarnivalPlayerCharacter::UpdateSwimAnimation()
+{
+	UAnimInstance* Anim = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+	if (!Anim) return;
+	UAnimSequence* Wanted = nullptr;
+	if (GetCharacterMovement()->IsSwimming() && !IsUsingRide())
+	{
+		const FVector Local = GetActorRotation().UnrotateVector(FVector(GetVelocity().X, GetVelocity().Y, 0.f));
+		if (Local.Size2D() < 40.f) Wanted = SwimIdleAnimation.LoadSynchronous();
+		else if (FMath::Abs(Local.Y) > FMath::Abs(Local.X) * 1.2f) Wanted = (Local.Y > 0.f ? SwimRightAnimation : SwimLeftAnimation).LoadSynchronous();
+		else Wanted = SwimForwardAnimation.LoadSynchronous();
+	}
+	if (Wanted == ActiveSwimSequence && (!Wanted || (ActiveSwimMontage && Anim->Montage_IsPlaying(ActiveSwimMontage)))) return;
+	if (ActiveSwimMontage && Anim->Montage_IsPlaying(ActiveSwimMontage)) Anim->Montage_Stop(0.25f, ActiveSwimMontage);
+	ActiveSwimSequence = Wanted;
+	ActiveSwimMontage = Wanted ? Anim->PlaySlotAnimationAsDynamicMontage(Wanted, SwimSlotName, 0.25f, 0.25f, 1.f, 100000) : nullptr;
 }
 
 ACarnivalMissionInteractionActor* ACarnivalPlayerCharacter::FindNearbyMissionInteraction() const
@@ -911,7 +1158,10 @@ void ACarnivalPlayerCharacter::MoveForward(float Value)
 	{
 		const FRotator Rotation = Controller->GetControlRotation();
 		const FRotator YawRotation(0, Rotation.Yaw, 0);
-		const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+		// Fully under water, forward follows the camera pitch so looking down dives.
+		const bool bPitchSwim = GetCharacterMovement()->IsSwimming() && bSubmerged
+			&& FMath::Abs(FRotator::NormalizeAxis(Rotation.Pitch)) > 20.f;
+		const FVector Direction = bPitchSwim ? Rotation.Vector() : FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 		AddMovementInput(Direction, Value);
 	}
 }

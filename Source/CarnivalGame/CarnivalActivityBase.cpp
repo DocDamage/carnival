@@ -6,6 +6,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Camera/PlayerCameraManager.h"
 
 ACarnivalActivityBase::ACarnivalActivityBase()
 {
@@ -21,8 +22,9 @@ ACarnivalActivityBase::ACarnivalActivityBase()
 	PromptText->SetupAttachment(RootComponent);
 	PromptText->SetRelativeLocation(FVector(0.0f, 0.0f, 120.0f));
 	PromptText->SetHorizontalAlignment(EHorizTextAligment::EHTA_Center);
-	PromptText->SetWorldSize(32.0f);
-	PromptText->SetText(FText::FromString(TEXT("ACTIVITY TRIGGER")));
+	PromptText->SetWorldSize(14.0f);
+	PromptText->SetText(FText::FromString(TEXT("Challenge")));
+	PromptText->SetHiddenInGame(true);
 
 	ActivityName = TEXT("Challenge");
 	Description = TEXT("Complete the challenge before time runs out!");
@@ -52,8 +54,10 @@ void ACarnivalActivityBase::BeginPlay()
 	ActivityTrigger->OnComponentBeginOverlap.AddDynamic(this, &ACarnivalActivityBase::OnTriggerOverlapBegin);
 	ActivityTrigger->OnComponentEndOverlap.AddDynamic(this, &ACarnivalActivityBase::OnTriggerOverlapEnd);
 
-	FString DisplayStr = FString::Printf(TEXT("[E] START: %s\n%s"), *ActivityName, *Description);
-	PromptText->SetText(FText::FromString(DisplayStr));
+	// Instructions and device/remapped controls belong in the contextual HUD.
+	PromptText->SetWorldSize(14.0f);
+	PromptText->SetText(FText::FromString(GetDisplayTitle()));
+	UpdateWorldLabel();
 	for (ACarnivalTargetActor* Target : Targets)
 	{
 		if (IsValid(Target)) Target->OwningActivity = this;
@@ -63,6 +67,7 @@ void ACarnivalActivityBase::BeginPlay()
 void ACarnivalActivityBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	UpdateWorldLabel();
 
 	if (ActivityState == ECarnivalActivityState::Active)
 	{
@@ -83,6 +88,43 @@ void ACarnivalActivityBase::Tick(float DeltaTime)
 		{
 			CompleteActivity(false);
 		}
+	}
+}
+
+FString ACarnivalActivityBase::GetDisplayTitle() const
+{
+	FString Title = ActivityName.TrimStartAndEnd();
+	if (!Title.RemoveFromStart(TEXT("Activity_"))) return Title.IsEmpty() ? TEXT("Challenge") : Title;
+	FString Result;
+	for (int32 Index = 0; Index < Title.Len(); ++Index)
+	{
+		const TCHAR Character = Title[Index];
+		if (Character == TEXT('_'))
+		{
+			Result += TEXT(' ');
+			continue;
+		}
+		if (Index > 0 && FChar::IsUpper(Character)
+			&& (FChar::IsLower(Title[Index - 1]) || FChar::IsDigit(Title[Index - 1])
+				|| (FChar::IsUpper(Title[Index - 1]) && Index + 1 < Title.Len() && FChar::IsLower(Title[Index + 1]))))
+		{
+			Result += TEXT(' ');
+		}
+		Result += Character;
+	}
+	return Result.IsEmpty() ? TEXT("Challenge") : Result;
+}
+
+void ACarnivalActivityBase::UpdateWorldLabel()
+{
+	APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(this, 0);
+	const bool bNearby = Camera && FVector::DistSquared(Camera->GetCameraLocation(), GetActorLocation()) <= FMath::Square(1200.f);
+	PromptText->SetHiddenInGame(!bNearby);
+	if (bNearby)
+	{
+		// Face the local camera horizontally so the title cannot read backwards.
+		const FVector Direction = Camera->GetCameraLocation() - PromptText->GetComponentLocation();
+		PromptText->SetWorldRotation(FRotator(0.f, Direction.Rotation().Yaw, 0.f));
 	}
 }
 

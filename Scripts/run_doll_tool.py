@@ -71,6 +71,14 @@ child_env = os.environ.copy()
 # sessions. Native builds retain normal SDK validation; no global env changes.
 if mode in ("unreal", "render", "editor", "playtest", "render-pie") or mode in test_modes:
     child_env["UE_SKIP_UBT_SDK_SETUP"] = "1"
+native_dump_dir = child_env.get('CARNIVAL_NATIVE_DUMP_DIR')
+if native_dump_dir:
+    assert mode in ('editor', 'render-pie', 'playtest'), 'Native observer is scoped to diagnostic editor runs'
+    observer = base/'Saved/Diagnostics/NativeCrashObserver.exe'
+    assert observer.exists(), 'Build Scripts/build_native_crash_observer.cmd first'
+    dump_dir = Path(native_dump_dir).resolve()
+    assert dump_dir.is_relative_to(base/'Saved/CharacterRepairs'), 'Keep native diagnostics in the project report folder'
+    args = [str(observer), str(dump_dir), *args]
 with log.open("w", encoding="utf-8") as output:
     started_at = time.time()
     result = subprocess.run(args, cwd=base, env=child_env, stdout=output, stderr=subprocess.STDOUT,
@@ -116,12 +124,24 @@ if mode == 'playtest' and result.returncode == 0:
             sys.exit(1)
 if mode in ('playtest','render-pie') and script:
     acceptance_reports = {
+        'verify_crowd_roaming_pie': base/'Saved/CrowdAcceptance'/child_env.get('CARNIVAL_CROWD_REPORT','RoamingPIE_20260930')/'index.json',
         'playtest_all_attended_rides': base/'Saved/RideDevelopment'/child_env.get('CARNIVAL_RIDE_REPORT','AllRidePIE_'+child_env['CARNIVAL_RIDE_LIGHTING'] if child_env.get('CARNIVAL_RIDE_LIGHTING') else 'AllRidePIE')/'index.json',
         'inspect_ride_seats_pie': base/'Saved/RideDevelopment/ConstructedSeatIds.json',
         'playtest_bumper_arena': base/'Saved/RideDevelopment/BumperArenaPIE/index.json',
         'playtest_interior_camera_roundtrips': base/'Saved/WorldExpansion/InteriorCameraAcceptance'/(child_env.get('CARNIVAL_INTERIOR_REPORT','Roundtrips')+'.json'),
         'review_settings_readability_pie': base/'Saved/PresentationAcceptance/SettingsReadability/index.json',
-        'review_populated_carnival_pie': base/'Saved/PresentationAcceptance/PopulatedCarnival/index.json',
+        'review_session_menu_pie': base/'Saved/PresentationAcceptance/SessionMenu/index.json',
+        'review_populated_carnival_pie': base/'Saved/PresentationAcceptance'/child_env.get('CARNIVAL_POPULATED_REPORT','PopulatedCarnival')/'index.json',
+        'compare_midway_night_fill_pie': base/'Saved/PresentationAcceptance'/child_env.get('CARNIVAL_NIGHT_FILL_REPORT','NightFillComparison_20260930')/'index.json',
+        'review_dean_skin_bake_pie': base/'Saved/CharacterRepairs/DeanSkinRenderedProof_20260930/index.json',
+        'review_dean_outfit_isolation_pie': base/'Saved/CharacterRepairs'/child_env.get('CARNIVAL_OUTFIT_REPORT','DeanOutfitIsolation_20260930')/'index.json',
+        'review_g1_clothing_family_pie': base/'Saved/CharacterRepairs'/child_env.get('CARNIVAL_FAMILY_GALLERY_REPORT','G1ClothingFamilyGallery_20260930')/'index.json',
+        'review_dean_family_pose_pie': base/'Saved/CharacterRepairs/DeanFamilyPoseAndShadow_20260930/index.json',
+        'review_dean_retarget_policy_pie': base/'Saved/CharacterRepairs/DeanRetargetPolicyAndBodyShadow_20260930/index.json',
+        'review_dean_authored_reference_pie': base/'Saved/CharacterRepairs/DeanAuthoredReferenceAndGarmentShadow_20260930/index.json',
+        'review_dean_space_conversion_pie': base/'Saved/CharacterRepairs/DeanAnimationSpaceConversionSampled_20260930/index.json',
+        'review_crowd_head_skin_candidates_pie': base/'Saved/CharacterRepairs'/child_env.get('CARNIVAL_SKIN_CANDIDATE_REPORT','CrowdHeadSkinCandidates_20260930')/'index.json',
+        'review_dean_integrated_crowd_pie': base/'Saved/CharacterRepairs'/child_env.get('CARNIVAL_DEAN_LIVE_REPORT','DeanCrowdLiveAcceptance_20260930')/'index.json',
         'survey_water_vehicle_placements': base/'Saved/WorldExpansion/WaterVehicleAcceptance'/(child_env.get('CARNIVAL_VEHICLE_WORLD','main')+'_PlacementSurvey.json'),
         'review_lab_b_gallery_pie': base/'Saved/WorldExpansion/LabB_Gallery_PIE/Review.json',
         'playtest_balloon_station_walks': base/'Saved/RideDevelopment'/(child_env.get('CARNIVAL_BALLOON_WALK_REPORT','Balloon_Station_Walks')+'.json'),
@@ -140,6 +160,24 @@ if mode in ('playtest','render-pie') and script:
         else:report=json.loads(report_path.read_text(encoding='utf-8-sig'))
         report['engine_exit_code']=result.returncode
         if mode=='render-pie':report['render_rhi']=render_rhi
+        if script.stem in ('review_populated_carnival_pie','verify_crowd_roaming_pie','compare_midway_night_fill_pie','review_dean_integrated_crowd_pie','review_crowd_head_skin_candidates_pie'):
+            engine_log=logs/(script.stem+'_engine.log')
+            if engine_log.exists():
+                engine_text=engine_log.read_text(errors='replace')
+                representation_errors=engine_text.count('LogMassRepresentation: Error:')
+                report['representation_error_count']=representation_errors
+                if representation_errors:
+                    report['success']=False
+                    report.setdefault('errors',[]).append(str(representation_errors)+' live Mass representation errors; see engine log')
+                for key,pattern,label in (
+                    ('blueprint_runtime_error_count', 'PIE: Error: Blueprint Runtime Error:', 'Blueprint runtime errors'),
+                    ('crowd_spawn_error_count', 'LogCarnivalCrowdSpawn: Error:', 'crowd spawn errors'),
+                    ('metahuman_representation_error_count', 'LogMetaHumanMassRepresentation: Error:', 'MetaHuman representation errors')):
+                    count=engine_text.count(pattern)
+                    report[key]=count
+                    if count:
+                        report['success']=False
+                        report.setdefault('errors',[]).append(str(count)+' '+label+'; see engine log')
         if result.returncode != 0:
             report['success']=False
             report.setdefault('errors',[]).append('Engine process exited with code '+str(result.returncode))

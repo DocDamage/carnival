@@ -11,7 +11,13 @@ public class CarnivalPopulation : ModuleRules
             "Core",
             "CoreUObject",
             "Engine",
-            "MassSpawner"
+            "MassSpawner",
+            "MassAIBehavior",
+            "StateTreeModule",
+            "MassZoneGraphNavigation",
+            "MassNavigation",
+            "MassMovement",
+            "ZoneGraph"
         });
 
         PrivateDependencyModuleNames.AddRange(new string[]

@@ -601,9 +601,11 @@ def main():
                    "entry_anchor_local_cm": [-9741.085, 2428.270, 1637.206], "entry_world_cm": PRISON_GATE},
         "lab_a": {"location_cm": translation_for_anchor((1400.0, 400.0, 0.0), LAB_DOOR, -57.0), "yaw_deg": -57.0,
                   "entry_anchor_local_cm": [1400.0, 400.0, 0.0], "entry_world_cm": LAB_DOOR},
+        # Lab B's open front (removed gate, local (1425, 400)) meets Lab A's west opening
+        # (removed SM_MWall03-700x350-8, Lab A local (-1423, 400)); both rooms keep Lab A's yaw.
         "lab_b": {"location_cm": translation_for_anchor((1425.0, 400.0, 0.0),
-                    tuple(translation_for_anchor((1400.0, 400.0, 0.0), LAB_DOOR, -57.0)[i] + rotate_xy((-2825.0, 0.0), -57.0)[i] for i in (0, 1)) + (600.0,), 123.0),
-                  "yaw_deg": 123.0, "connector": "aligns the two lab room door openings"},
+                    tuple(translation_for_anchor((1400.0, 400.0, 0.0), LAB_DOOR, -57.0)[i] + rotate_xy((-1423.0, 400.0), -57.0)[i] for i in (0, 1)) + (600.0,), -57.0),
+                  "yaw_deg": -57.0, "connector": "aligns Lab B's open front with Lab A's west opening"},
         "east_docks": {"location_cm": EAST, "yaw_deg": 0.0},
         "sewers": {"location_cm": translation_for_anchor((100.0, -210.0, 0.0), SEWER_DOOR, 0.0), "yaw_deg": 0.0,
                    "entry_anchor_local_cm": [100.0, -210.0, 0.0], "entry_world_cm": SEWER_DOOR},

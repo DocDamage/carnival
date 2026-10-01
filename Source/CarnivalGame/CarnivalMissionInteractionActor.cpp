@@ -3,6 +3,7 @@
 #include "CarnivalMissionInteractionActor.h"
 
 #include "CarnivalMissionSubsystem.h"
+#include "CarnivalCampaignSubsystem.h"
 #include "CarnivalHauntedDoll.h"
 #include "CarnivalPlayerCharacter.h"
 #include "Components/SphereComponent.h"
@@ -104,6 +105,13 @@ void ACarnivalMissionInteractionActor::HandleMissionStateChanged(ECarnivalStoryM
 	ReceiveMissionStateChanged(NewState, Objective);
 }
 
+bool ACarnivalMissionInteractionActor::RestoreSavedDoor(bool bOpen)
+{
+	if (Interaction != ECarnivalMissionInteraction::MusicRoomDoor) return false;
+	if (ControlledDoorLeaves.IsEmpty()) CacheControlledDoorLeaves();
+	return SetControlledDoorOpen(bOpen, true);
+}
+
 bool ACarnivalMissionInteractionActor::CanInteract(const ACarnivalPlayerCharacter* Player) const
 {
 	if (!Player || bTriggerOnOverlap || !IsActionAvailable(GetMissionSubsystem()))
@@ -142,6 +150,13 @@ FText ACarnivalMissionInteractionActor::GetPromptText() const
 	if (!PromptOverride.IsEmpty())
 	{
 		return PromptOverride;
+	}
+	if (Interaction == ECarnivalMissionInteraction::CampaignStation)
+	{
+		for (const auto& Station : UCarnivalCampaignSubsystem::Stations()) if (Station.Id == CampaignStationId)
+			return FText::FromString(CampaignAction == 0 ? TEXT("Inspect ") + Station.Location
+				: FString::Printf(TEXT("Use %s control %d"), *Station.Location, CampaignAction));
+		return FText::GetEmpty();
 	}
 	if (Interaction == ECarnivalMissionInteraction::MusicRoomDoor)
 	{
@@ -222,6 +237,11 @@ UCarnivalMissionSubsystem* ACarnivalMissionInteractionActor::GetMissionSubsystem
 
 bool ACarnivalMissionInteractionActor::IsActionAvailable(const UCarnivalMissionSubsystem* Mission) const
 {
+	if (Interaction == ECarnivalMissionInteraction::CampaignStation)
+	{
+		const auto* Campaign = GetGameInstance() ? GetGameInstance()->GetSubsystem<UCarnivalCampaignSubsystem>() : nullptr;
+		return Campaign && Campaign->CanUseStation(CampaignStationId);
+	}
 	if (!Mission)
 	{
 		return false;
@@ -256,6 +276,15 @@ bool ACarnivalMissionInteractionActor::IsActionAvailable(const UCarnivalMissionS
 
 bool ACarnivalMissionInteractionActor::ExecuteMissionAction(ACarnivalPlayerCharacter* Player)
 {
+	if (Interaction == ECarnivalMissionInteraction::CampaignStation)
+	{
+		auto* Campaign = GetGameInstance() ? GetGameInstance()->GetSubsystem<UCarnivalCampaignSubsystem>() : nullptr;
+		if (!Campaign) return false;
+		const bool bAccepted = Campaign->UseStation(CampaignStationId, CampaignAction);
+		LastActionFailureMessage = FText::FromString(Campaign->LastResult);
+		if (auto* Mission = GetMissionSubsystem()) Mission->ShowPlayerFeedback(LastActionFailureMessage);
+		return bAccepted;
+	}
 	UCarnivalMissionSubsystem* Mission = GetMissionSubsystem();
 	if (!Mission || !IsActionAvailable(Mission))
 	{

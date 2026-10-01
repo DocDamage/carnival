@@ -15,7 +15,8 @@ LEVELS = [
     ("north_docks", "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_DocksNorth_Layout", (-55000.0, -55000.0, 600.0), 0.0),
     ("prison", "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_Prison", (-24829.058923937297, -33605.033443166416, -1037.206), -45.0),
     ("lab_a", "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_LabA", (-42097.962876199206, -7043.716818882417, 600.0), -57.0),
-    ("lab_b", "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_LabB", (-42524.98929804207, -5651.722409752812, 600.0), 123.0),
+    # Same yaw as Lab A: Lab B's open front meets Lab A's west opening (see fix_lab_b_alignment.py).
+    ("lab_b", "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_LabB", (-43649.0953, -4655.1830, 600.0), -57.0),
     ("east_docks", "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_DocksEast", (70000.0, 15000.0, 600.0), 0.0),
     ("sewers", "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_Sewers", (-27100.0, -12290.0, -1800.0), 0.0),
     ("atlantis", "/Game/Carnival/World/Levels/L_CarnivalWorldExpansion_Atlantis", (-13000.0, -11000.0, -1800.0), 0.0),
@@ -31,7 +32,8 @@ def package_file(package):
 def transform(location, yaw):
     value = unreal.Transform()
     value.set_editor_property("translation", unreal.Vector(*location))
-    value.set_editor_property("rotation", unreal.Rotator(0.0, float(yaw), 0.0).quaternion())
+    # Keyword form: positional Rotator args are (roll, pitch, yaw), which pitched rotated regions.
+    value.set_editor_property("rotation", unreal.Rotator(roll=0.0, pitch=0.0, yaw=float(yaw)).quaternion())
     value.set_editor_property("scale3d", unreal.Vector(1.0, 1.0, 1.0))
     return value
 

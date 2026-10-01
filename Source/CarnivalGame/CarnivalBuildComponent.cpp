@@ -269,3 +269,68 @@ bool UCarnivalBuildComponent::DemolishPiece()
 
 	return false;
 }
+
+TArray<FCarnivalSavedBuilding> UCarnivalBuildComponent::CaptureBuildings() const
+{
+	TArray<FCarnivalSavedBuilding> Result;
+	for (AActor* Actor : PlacedBuildingActors)
+	{
+		const auto* Piece = Cast<AStaticMeshActor>(Actor);
+		if (!IsValid(Piece) || !Piece->GetStaticMeshComponent()->GetStaticMesh()) continue;
+		auto& Saved = Result.AddDefaulted_GetRef();
+		Saved.Mesh = FSoftObjectPath(Piece->GetStaticMeshComponent()->GetStaticMesh());
+		Saved.Transform = Piece->GetActorTransform();
+	}
+	return Result;
+}
+
+bool UCarnivalBuildComponent::RestoreBuildings(const TArray<FCarnivalSavedBuilding>& Buildings,
+	const FVector& PlayerLocation, FString& Error)
+{
+	if (!GetWorld() || Buildings.Num() > 2000) { Error = TEXT("Invalid building data."); return false; }
+	TArray<AActor*> Staged;
+	FCollisionQueryParams Query(SCENE_QUERY_STAT(CarnivalLoadBuildings), false);
+	Query.AddIgnoredActor(GetOwner());
+	for (AActor* Actor : PlacedBuildingActors) if (IsValid(Actor)) Query.AddIgnoredActor(Actor);
+	auto Fail = [&](const TCHAR* Message)
+	{
+		for (AActor* Actor : Staged) Actor->Destroy();
+		Error = Message;
+		return false;
+	};
+	for (const auto& Saved : Buildings)
+	{
+		if (!Saved.Transform.IsValid() || !Saved.Transform.GetScale3D().Equals(FVector::OneVector))
+			return Fail(TEXT("Invalid building transform."));
+		// Only pieces already allowed by the game's authored build palette can be restored.
+		UStaticMesh* Mesh = nullptr;
+		for (const auto& Category : Categories)
+			for (UStaticMesh* Candidate : Category.Pieces)
+				if (Candidate && FSoftObjectPath(Candidate) == Saved.Mesh) Mesh = Candidate;
+		if (!Mesh) return Fail(TEXT("A saved building piece is unavailable in this build."));
+		const FBox Bounds = Mesh->GetBoundingBox();
+		const FVector Center = Saved.Transform.TransformPosition(Bounds.GetCenter());
+		const FVector Extent = (Bounds.GetExtent() - FVector(1.f)).ComponentMax(FVector(1.f));
+		FHitResult Floor;
+		const FVector Base = Saved.Transform.GetLocation() + FVector(0, 0, Bounds.Min.Z);
+		if (!GetWorld()->LineTraceSingleByChannel(Floor, Base + FVector(0, 0, 5), Base - FVector(0, 0, 12), ECC_Visibility, Query)
+			|| Floor.ImpactNormal.Z < .7f
+			|| GetWorld()->OverlapBlockingTestByProfile(Center, Saved.Transform.GetRotation(), TEXT("BlockAll"), FCollisionShape::MakeBox(Extent), Query))
+			return Fail(TEXT("A saved building no longer fits on clear, supported ground."));
+		const FVector LocalPlayer = Saved.Transform.InverseTransformPosition(PlayerLocation);
+		if (Bounds.ExpandBy(FVector(60, 60, 100)).IsInsideOrOn(LocalPlayer))
+			return Fail(TEXT("A saved building would block the saved player position."));
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		auto* Piece = GetWorld()->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), Saved.Transform, Params);
+		if (!Piece) return Fail(TEXT("Unable to restore a building piece."));
+		Staged.Add(Piece);
+		Piece->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
+		Piece->GetStaticMeshComponent()->SetStaticMesh(Mesh);
+		Piece->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("BlockAll"));
+	}
+	for (AActor* Actor : PlacedBuildingActors) if (IsValid(Actor)) Actor->Destroy();
+	PlacedBuildingActors = MoveTemp(Staged);
+	if (bIsBuildModeActive) ToggleBuildMode();
+	return true;
+}

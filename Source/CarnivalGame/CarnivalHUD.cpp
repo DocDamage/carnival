@@ -16,14 +16,17 @@
 #include "CarnivalBuildComponent.h"
 #include "CarnivalActivityBase.h"
 #include "CarnivalMissionInteractionActor.h"
+#include "CarnivalDoorSubsystem.h"
 #include "CarnivalMissionSubsystem.h"
+#include "CarnivalSaveSubsystem.h"
+#include "CarnivalCampaignSubsystem.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
 
 ACarnivalHUD::ACarnivalHUD()
 {
-	bShowHelpOverlay = true;
+	bShowHelpOverlay = false;
 	bShowSettingsMenu = false;
 }
 
@@ -49,6 +52,11 @@ void ACarnivalHUD::DrawHUD()
 			FLinearColor(.015f,.02f,.03f,.96f), FLinearColor(1.f,.72f,.3f), FLinearColor::White);
 		return;
 	}
+	if (PC && PC->bSessionMenuOpen)
+	{
+		DrawSessionMenu(PC);
+		return;
+	}
 	if (PC && PC->bSettingsMenuOpen)
 	{
 		DrawSettingsMenu(PC);
@@ -62,16 +70,94 @@ void ACarnivalHUD::DrawHUD()
 		DrawTelemetry(Char, PC);
 #if WITH_EDITOR
 		DrawFastTravelGuide();
-		DrawBuildModeHUD(Char);
 #endif
+	}
+	if (Char && Char->BuildComponent && Char->BuildComponent->bIsBuildModeActive)
+	{
+		DrawBuildModeHUD(Char);
+		return;
 	}
 
 	DrawActivityOverlay(Char, PC);
+	DrawVehicleControls(PC);
 	DrawStoryMissionOverlay(PC);
 	DrawStoryInteractionPrompt(Char, PC);
 	DrawPlayerRecoveryPrompt(Char, PC);
 	DrawRideInteraction(Char, PC);
 
+}
+
+void ACarnivalHUD::DrawVehicleControls(ACarnivalPlayerController* PC)
+{
+	if (!PC || !PC->GetPawn()) return;
+	const auto* Bike = Cast<ACarnivalMotorcycle>(PC->GetPawn());
+	const auto* Boat = Cast<ACarnivalBoat>(PC->GetPawn());
+	const auto* Hover = Cast<ACarnivalHovercraft>(PC->GetPawn());
+	if (!Bike && !Boat && !Hover) return;
+	TArray<FString> Lines;
+	Lines.Add(FString::Printf(TEXT("[%s] Accelerate  [%s] Reverse  [%s] Steer"),
+		*PC->GetActionKeyLabel(PC->ThrottleAction), *PC->GetActionKeyLabel(PC->BrakeReverseAction), *PC->GetActionKeyLabel(PC->SteerAction)));
+	Lines.Add(FString::Printf(TEXT("[%s] Brake  [%s] Exit / recover"),
+		*PC->GetActionKeyLabel(PC->BrakeAction), *PC->GetActionKeyLabel(PC->InteractMountAction)));
+	if (Hover) Lines.Add(FString::Printf(TEXT("[%s] Boost  [%s] Strafe"),
+		*PC->GetActionKeyLabel(PC->HandbrakeAction), *PC->GetActionKeyLabel(PC->RiderBalanceAction)));
+	const float Width = FMath::Min(580.f, Canvas->ClipX - 40.f);
+	DrawBoxWithText(20.f, Canvas->ClipY - 106.f, Width, 86.f, Bike ? TEXT("MOTORCYCLE") : Boat ? TEXT("BOAT") : TEXT("HOVERCRAFT"),
+		Lines, FLinearColor(.025f,.035f,.05f,.9f), FLinearColor(1.f,.78f,.35f), FLinearColor::White);
+}
+
+void ACarnivalHUD::DrawSessionMenu(ACarnivalPlayerController* PC)
+{
+	const FString Confirm = PC->bUsingGamepad ? (PC->bPlayStationPrompts ? TEXT("Cross") : TEXT("A")) : TEXT("Enter");
+	const FString Back = PC->bUsingGamepad ? (PC->bPlayStationPrompts ? TEXT("Circle") : TEXT("B")) : TEXT("Escape");
+	TArray<FString> Lines;
+	if (PC->bSessionRecordsOpen)
+	{
+		const auto* Campaign = PC->GetGameInstance()->GetSubsystem<UCarnivalCampaignSubsystem>();
+		const TArray<FString> Records = PC->bJournalTab ? Campaign->GetJournalLines() : Campaign->GetInventoryLines();
+		// One journal entry per page remains readable when wrapped at small resolutions.
+		const int32 Page = FMath::Clamp(PC->RecordsPage, 0, FMath::Max(0, Records.Num() - 1));
+		PC->RecordsPage = Page;
+		Lines.Add(FString::Printf(TEXT("Entry %d / %d"), Page + 1, Records.Num()));
+		if (Records.IsValidIndex(Page)) Lines.Add(Records[Page]);
+		Lines.Add(TEXT("D-pad / arrows: up/down entries, left/right inventory/journal."));
+		Lines.Add(FString::Printf(TEXT("[%s] Return to pause menu"), *Back));
+		const float Width = FMath::Min(720.f, Canvas->ClipX - 40.f);
+		DrawBoxWithText((Canvas->ClipX - Width) * .5f, Canvas->ClipY * .3f, Width, 170.f,
+			PC->bJournalTab ? TEXT("SIGNAL JOURNAL") : TEXT("INVENTORY"), Lines,
+			FLinearColor(.025f,.035f,.05f,.96f), FLinearColor(1.f,.78f,.35f), FLinearColor::White);
+		return;
+	}
+	if (PC->SessionMenuConfirmation >= 0)
+	{
+		const TCHAR* Message = PC->SessionMenuConfirmation == 2 ? TEXT("Save over this slot?") :
+			PC->SessionMenuConfirmation == 3 ? TEXT("Load this slot and replace current progress?") :
+			PC->SessionMenuConfirmation == 4 ? TEXT("Restart the investigation?") :
+			PC->SessionMenuConfirmation == 9 ? TEXT("Return to the nearest path?") : TEXT("Quit the game? Unsaved progress will be lost.");
+		Lines.Add(Message);
+		Lines.Add(FString::Printf(TEXT("[%s] Confirm   [%s] Cancel"), *Confirm, *Back));
+	}
+	else
+	{
+		auto Row = [&](int32 Index, const FString& Text) { Lines.Add((PC->SessionMenuSelection == Index ? TEXT("> ") : TEXT("  ")) + Text); };
+		Row(0, TEXT("Resume"));
+		Row(1, FString::Printf(TEXT("Slot %d: %s"), PC->SelectedSaveSlot + 1, *PC->SelectedSaveSummary));
+		Row(2, TEXT("Save game"));
+		Row(3, TEXT("Load game"));
+		Row(4, TEXT("Retry investigation"));
+		Row(5, TEXT("Settings"));
+		Row(6, TEXT("Quit"));
+		Row(7, TEXT("Inventory"));
+		Row(8, TEXT("Campaign journal"));
+		Row(9, TEXT("Return to path"));
+		Lines.Add(TEXT(""));
+		Lines.Add(FString::Printf(TEXT("D-pad / arrows: select. Left / right: slot. [%s] Choose. [%s] Resume."), *Confirm, *Back));
+	}
+	if (!PC->SessionMenuFeedback.IsEmpty()) Lines.Add(PC->SessionMenuFeedback);
+	const float Width = FMath::Min(720.f, Canvas->ClipX - 40.f);
+	const float Height = 48.f + Lines.Num() * 16.f;
+	DrawBoxWithText((Canvas->ClipX - Width) * .5f, (Canvas->ClipY - Height) * .5f, Width, Height,
+		TEXT("PAUSED"), Lines, FLinearColor(.025f,.035f,.05f,.96f), FLinearColor(1.f,.78f,.35f), FLinearColor::White);
 }
 
 void ACarnivalHUD::DrawPlayerRecoveryPrompt(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC)
@@ -91,7 +177,9 @@ void ACarnivalHUD::DrawStoryMissionOverlay(ACarnivalPlayerController* PC)
 	if (!PC || !PC->GetGameInstance()) return;
 	const UCarnivalMissionSubsystem* Mission = PC->GetGameInstance()->GetSubsystem<UCarnivalMissionSubsystem>();
 	if (!Mission) return;
-	const FText Objective = Mission->GetCurrentObjective();
+	const auto* Campaign = PC->GetGameInstance()->GetSubsystem<UCarnivalCampaignSubsystem>();
+	const bool bCampaignObjective = !Mission->IsMissionActive() && Campaign && !Campaign->GetObjective().IsEmpty();
+	const FText Objective = bCampaignObjective ? Campaign->GetObjective() : Mission->GetCurrentObjective();
 	const FText Feedback = Mission->GetPlayerFeedback();
 	if (Objective.IsEmpty() && Feedback.IsEmpty()) return;
 
@@ -102,7 +190,7 @@ void ACarnivalHUD::DrawStoryMissionOverlay(ACarnivalPlayerController* PC)
 	const float Width = FMath::Min(680.f, Canvas->ClipX - 40.f);
 	const float Height = Lines.Num() > 1 ? 78.f : 58.f;
 	DrawBoxWithText((Canvas->ClipX - Width) * .5f, 20.f, Width, Height,
-		bComplete ? TEXT("INVESTIGATION COMPLETE") : TEXT("MISSING WORKER"), Lines,
+		bCampaignObjective ? TEXT("THE SIGNAL NETWORK") : bComplete ? TEXT("INVESTIGATION COMPLETE") : TEXT("MISSING WORKER"), Lines,
 		FLinearColor(.025f,.035f,.05f,.88f),
 		bComplete ? FLinearColor(.35f,1.f,.55f) : FLinearColor(1.f,.78f,.35f),
 		FLinearColor::White);
@@ -112,10 +200,14 @@ void ACarnivalHUD::DrawStoryInteractionPrompt(ACarnivalPlayerCharacter* Char, AC
 {
 	if (!Char || !PC) return;
 	ACarnivalMissionInteractionActor* Target = Char->FindNearbyMissionInteraction();
-	if (!Target) return;
+	AActor* Door = Target ? nullptr : Char->FindNearbyDoor();
+	if (!Target && !Door) return;
 	const FString Button = PC->GetActionKeyLabel(PC->ContextInteractAction);
+	FString Prompt;
+	if (Target) Prompt = Target->GetPromptText().ToString();
+	else Prompt = GetWorld()->GetSubsystem<UCarnivalDoorSubsystem>()->IsDoorOpen(Door) ? TEXT("Close door") : TEXT("Open door");
 	TArray<FString> Lines;
-	Lines.Add(FString::Printf(TEXT("[%s] %s"), *Button, *Target->GetPromptText().ToString()));
+	Lines.Add(FString::Printf(TEXT("[%s] %s"), *Button, *Prompt));
 	const float Width = FMath::Min(520.f, Canvas->ClipX - 40.f);
 	DrawBoxWithText((Canvas->ClipX - Width) * .5f, Canvas->ClipY - 88.f, Width, 58.f,
 		TEXT("INTERACT"), Lines,
@@ -330,11 +422,13 @@ void ACarnivalHUD::DrawBuildModeHUD(ACarnivalPlayerCharacter* Char)
 			}
 		}
 
-		Lines.Add(FString::Printf(TEXT("Category [T]: %s"), *CatName));
-		Lines.Add(FString::Printf(TEXT("Piece [Q/E/Scroll]: %s"), *PieceName));
-		Lines.Add(TEXT("Action: [LMB] Place Piece | [RMB] Demolish Aimed"));
-		Lines.Add(TEXT("Transform: [R] Rotate 90 deg | Grid Snap: 100cm"));
-		Lines.Add(TEXT("Exit: [B] to Close Build Mode"));
+		auto* PC = Cast<ACarnivalPlayerController>(GetOwningPlayerController());
+		if (!PC) return;
+		Lines.Add(FString::Printf(TEXT("[%s] Category: %s"), *PC->GetActionKeyLabel(PC->CycleCategoryAction), *CatName));
+		Lines.Add(FString::Printf(TEXT("[%s / %s] Piece: %s"), *PC->GetActionKeyLabel(PC->CyclePiecePrevAction), *PC->GetActionKeyLabel(PC->CyclePieceNextAction), *PieceName));
+		Lines.Add(FString::Printf(TEXT("[%s] Place  [%s] Demolish  [%s] Rotate"), *PC->GetActionKeyLabel(PC->AttackAction), *PC->GetActionKeyLabel(PC->SecondaryAction), *PC->GetActionKeyLabel(PC->RotatePieceAction)));
+		Lines.Add(FString::Printf(TEXT("[%s] Exit building  |  Grid: %.0f cm"), *PC->GetActionKeyLabel(PC->ToggleBuildAction), BuildComp->GridSnapSize));
+		Lines.Add(BuildComp->PlacementFeedback);
 	}
 	else
 	{
@@ -494,6 +588,24 @@ void ACarnivalHUD::DrawActivityOverlay(ACarnivalPlayerCharacter* Char, ACarnival
 	}
 	const bool bMissionInteractionFocused = Char->FindNearbyMissionInteraction() != nullptr;
 	const FString ContextButton = PC ? PC->GetActionKeyLabel(PC->ContextInteractAction) : TEXT("E");
+	auto ActivityInstructions = [PC](FString Text)
+	{
+		if (!PC) return Text;
+		FString Result;
+		for (int32 Index = 0; Index < Text.Len(); ++Index)
+		{
+			if (Text[Index] == TEXT('[') && Index + 2 < Text.Len() && Text[Index + 2] == TEXT(']')
+				&& Text[Index + 1] >= TEXT('1') && Text[Index + 1] <= TEXT('3'))
+			{
+				const UInputAction* Action = Text[Index + 1] == TEXT('1') ? PC->WeaponSlot1Action
+					: Text[Index + 1] == TEXT('2') ? PC->WeaponSlot2Action : PC->WeaponSlot3Action;
+				Result += FString::Printf(TEXT("[%s]"), *PC->GetActionKeyLabel(Action));
+				Index += 2;
+			}
+			else Result += Text[Index];
+		}
+		return Result;
+	};
 
 	if (Char->ActiveActivity)
 	{
@@ -511,12 +623,12 @@ void ACarnivalHUD::DrawActivityOverlay(ACarnivalPlayerCharacter* Char, ACarnival
 			}
 
 			TArray<FString> Lines;
-			Lines.Add(Act->GetCurrentObjectiveText());
+			Lines.Add(ActivityInstructions(Act->GetCurrentObjectiveText()));
 			Lines.Add(FString::Printf(TEXT("Time Remaining: %.1fs  |  Score: %d"), Act->TimeRemaining, Act->CurrentScore));
 
 			FLinearColor BorderCol = (Act->TimeRemaining < 10.0f) ? FLinearColor(1.0f, 0.2f, 0.2f, 1.0f) : FLinearColor(0.2f, 0.8f, 1.0f, 1.0f);
 			DrawBoxWithText(X, Y, Width, Height,
-				FString::Printf(TEXT("ACTIVITY: %s"), *Act->ActivityName.ToUpper()),
+				Act->GetDisplayTitle(),
 				Lines,
 				FLinearColor(0.02f, 0.04f, 0.08f, 0.88f),
 				BorderCol,
@@ -530,7 +642,7 @@ void ACarnivalHUD::DrawActivityOverlay(ACarnivalPlayerCharacter* Char, ACarnival
 			float Y = (Canvas->ClipY - Height) * 0.5f;
 
 			TArray<FString> Lines;
-			Lines.Add(FString::Printf(TEXT("Challenge: %s"), *Act->ActivityName));
+			Lines.Add(FString::Printf(TEXT("Challenge: %s"), *Act->GetDisplayTitle()));
 			Lines.Add(FString::Printf(TEXT("Completed in: %.1fs  |  Rating: %s"), Act->ElapsedTime, *Act->GetMedalRating()));
 			Lines.Add(FString::Printf(TEXT("Final Score: %d points"), Act->CurrentScore));
 			Lines.Add(FString::Printf(TEXT("Press [%s] to Dismiss"), *ContextButton));
@@ -550,7 +662,7 @@ void ACarnivalHUD::DrawActivityOverlay(ACarnivalPlayerCharacter* Char, ACarnival
 			float Y = (Canvas->ClipY - Height) * 0.5f;
 
 			TArray<FString> Lines;
-			Lines.Add(FString::Printf(TEXT("Challenge: %s"), *Act->ActivityName));
+			Lines.Add(FString::Printf(TEXT("Challenge: %s"), *Act->GetDisplayTitle()));
 			Lines.Add(TEXT("Time expired! You didn't complete the objective in time."));
 			Lines.Add(FString::Printf(TEXT("Press [%s] to Retry"), *ContextButton));
 
@@ -572,11 +684,10 @@ void ACarnivalHUD::DrawActivityOverlay(ACarnivalPlayerCharacter* Char, ACarnival
 		float Y = Canvas->ClipY - 190.0f;
 
 		TArray<FString> Lines;
-		Lines.Add(FString::Printf(TEXT("%s - %s"), *Act->ActivityName, *Act->Description));
-		Lines.Add(FString::Printf(TEXT("Press [%s] to Begin Challenge!"), *ContextButton));
+		Lines.Add(ActivityInstructions(Act->Description));
 
 		DrawBoxWithText(X, Y, Width, Height,
-			FString::Printf(TEXT("[%s] START ACTIVITY"), *ContextButton),
+			FString::Printf(TEXT("[%s] %s"), *ContextButton, *Act->GetDisplayTitle()),
 			Lines,
 			FLinearColor(0.04f, 0.03f, 0.08f, 0.88f),
 			FLinearColor(1.0f, 0.8f, 0.2f, 1.0f),

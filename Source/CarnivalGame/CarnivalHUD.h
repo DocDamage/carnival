@@ -23,7 +23,7 @@ public:
 	virtual void DrawHUD() override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings")
-	bool bShowHelpOverlay = true;
+	bool bShowHelpOverlay = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings")
 	bool bShowSettingsMenu = false;
@@ -32,6 +32,8 @@ public:
 	void ToggleSettingsMenu();
 
 protected:
+	void DrawSessionMenu(ACarnivalPlayerController* PC);
+	void DrawVehicleControls(ACarnivalPlayerController* PC);
 	void DrawTelemetry(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC);
 	void DrawBuildModeHUD(ACarnivalPlayerCharacter* Char);
 	void DrawFastTravelGuide();

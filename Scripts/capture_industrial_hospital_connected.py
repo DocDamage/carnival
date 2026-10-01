@@ -37,6 +37,8 @@ CASES = [
      hospital_world((5200.0, -1500.0, 210.0)), hospital_world((5200.0, -300.0, 210.0))),
 ]
 CASES.extend(globals().get("CAPTURE_EXTRA_CASES", []))
+if globals().get("CAPTURE_OVERRIDE_CASES"):
+    CASES = list(globals()["CAPTURE_OVERRIDE_CASES"])
 
 # Optional unsaved diagnostic captures share the exact same camera and map.
 VARIANTS = globals().get("CAPTURE_VARIANTS", [])

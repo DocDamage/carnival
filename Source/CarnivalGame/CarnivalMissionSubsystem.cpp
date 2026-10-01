@@ -1,9 +1,44 @@
 // Copyright CarnivalMetaHuman. All Rights Reserved.
 
 #include "CarnivalMissionSubsystem.h"
+#include "CarnivalCampaignSubsystem.h"
 #include "CarnivalMotorcycle.h"
+#include "Engine/GameInstance.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
+
+namespace
+{
+void RetainRescueUnlock(UWorld* World)
+{
+	if (World && World->GetGameInstance())
+		if (auto* Campaign = World->GetGameInstance()->GetSubsystem<UCarnivalCampaignSubsystem>()) Campaign->UnlockAfterRescue();
+}
+}
+
+bool UCarnivalMissionSubsystem::IsSaveableState(ECarnivalStoryMissionState State)
+{
+	return static_cast<uint8>(State) <= static_cast<uint8>(ECarnivalStoryMissionState::Complete)
+		&& State != ECarnivalStoryMissionState::PlayDollScare;
+}
+
+bool UCarnivalMissionSubsystem::RestoreSavedState(ECarnivalStoryMissionState State)
+{
+	if (!IsSaveableState(State)) return false;
+	ResetProgress();
+	MissionState = State;
+	bFoundFoyerGlove = State >= ECarnivalStoryMissionState::SearchStudy;
+	bHasServiceKey = State >= ECarnivalStoryMissionState::FindWorker;
+	bFoundWorker = State >= ECarnivalStoryMissionState::RecoverMusicBox;
+	bRecoveredMusicBox = State >= ECarnivalStoryMissionState::EscapeMansion;
+	if (State == ECarnivalStoryMissionState::Complete)
+	{
+		CompletionMessageEndTime = (GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f) + 8.f;
+		RetainRescueUnlock(GetWorld());
+	}
+	BroadcastCurrentState();
+	return true;
+}
 
 bool UCarnivalMissionSubsystem::BeginStoryMission()
 {
@@ -137,6 +172,7 @@ bool UCarnivalMissionSubsystem::ReportCarnivalReturned()
 
 	UWorld* World = GetWorld();
 	CompletionMessageEndTime = World ? World->GetTimeSeconds() + 8.0f : 8.0f;
+	RetainRescueUnlock(World);
 	return TransitionTo(ECarnivalStoryMissionState::Complete);
 }
 

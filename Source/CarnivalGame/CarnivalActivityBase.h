@@ -107,6 +107,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Activity")
 	FString GetCurrentObjectiveText() const;
 
+	// Legacy placements use their actor identifier as ActivityName.
+	UFUNCTION(BlueprintPure, Category = "Activity")
+	FString GetDisplayTitle() const;
+
 	UFUNCTION(BlueprintPure, Category = "Activity")
 	FString GetMedalRating() const;
 
@@ -120,6 +124,7 @@ protected:
 	void OnTriggerOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
 	void CheckPlayerCheckpoints();
+	void UpdateWorldLabel();
 
 	// A target can only contribute once during a run, even if Blueprint repeats a callback.
 	TSet<TWeakObjectPtr<ACarnivalTargetActor>> ScoredTargets;

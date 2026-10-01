@@ -10,6 +10,14 @@ class UStaticMeshComponent;
 class UStaticMesh;
 class UMaterialInterface;
 
+USTRUCT()
+struct FCarnivalSavedBuilding
+{
+	GENERATED_BODY()
+	UPROPERTY(SaveGame) FSoftObjectPath Mesh;
+	UPROPERTY(SaveGame) FTransform Transform;
+};
+
 USTRUCT(BlueprintType)
 struct FCarnivalBuildCategory
 {
@@ -28,6 +36,10 @@ class CARNIVALGAME_API UCarnivalBuildComponent : public UActorComponent
 	GENERATED_BODY()
 
 public:
+	TArray<FCarnivalSavedBuilding> CaptureBuildings() const;
+	// Validate and stage all replacements before discarding any current construction.
+	bool RestoreBuildings(const TArray<FCarnivalSavedBuilding>& Buildings, const FVector& PlayerLocation, FString& Error);
+	const TArray<AActor*>& GetPlacedBuildingActors() const { return PlacedBuildingActors; }
 	UCarnivalBuildComponent();
 
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;

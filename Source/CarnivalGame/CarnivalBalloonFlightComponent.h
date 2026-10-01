@@ -43,6 +43,10 @@ public:
     UFUNCTION(BlueprintCallable, Category="Balloon|Authoring", meta=(DevelopmentOnly))
     static int32 RepairRedundantFireAutoActivation(UBlueprint* Blueprint);
 
+    /** Editor-only guard for the inspected imported ride parent, with caller-owned backup. */
+    UFUNCTION(BlueprintCallable, Category="Balloon|Authoring", meta=(DevelopmentOnly))
+    static int32 RepairEmptyAnnouncementQueue(UBlueprint* Blueprint);
+
 protected:
     virtual void BeginPlay() override;
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* TickFunction) override;

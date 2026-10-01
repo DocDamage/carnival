@@ -80,6 +80,44 @@ bool FPlayerSafeRecoveryTest::RunTest(const FString&)
 	TestTrue(TEXT("Stuck player can return to the last clear walkable point"), Player->TryRecoverToSafePosition());
 	TestTrue(TEXT("Blocked-path recovery preserves walking and collision"), Player->GetCharacterMovement()->MovementMode == MOVE_Walking
 		&& Player->GetCapsuleComponent()->GetCollisionEnabled() == ECollisionEnabled::QueryAndPhysics);
+
+	// A walkable pit refreshes the safe point on its own floor, so ordinary recovery stays inside.
+	auto Box = [World](const FVector& Location, const FVector& Extent)
+	{
+		AActor* Actor = World->SpawnActor<AActor>(Location, FRotator::ZeroRotator);
+		UBoxComponent* Shape = NewObject<UBoxComponent>(Actor);
+		Actor->SetRootComponent(Shape); Shape->SetBoxExtent(Extent); Shape->SetCollisionProfileName(TEXT("BlockAll")); Shape->RegisterComponent();
+		Actor->SetActorLocation(Location);   // a root attached after spawning starts at the origin
+		return Actor;
+	};
+	Wall->Destroy();
+	const FVector Pit(4000.f, 0.f, -2000.f);
+	Box(Pit + FVector(0.f, 0.f, -20.f), FVector(300.f, 300.f, 20.f));
+	for (const FVector& Side : {FVector(320.f, 0.f, 0.f), FVector(-320.f, 0.f, 0.f), FVector(0.f, 320.f, 0.f), FVector(0.f, -320.f, 0.f)})
+		Box(Pit + Side + FVector(0.f, 0.f, 600.f), FVector(Side.X != 0.f ? 20.f : 340.f, Side.Y != 0.f ? 20.f : 340.f, 600.f));
+	Player->SetActorLocation(Pit + FVector(0.f, 0.f, 98.f), false, nullptr, ETeleportType::TeleportPhysics);
+	Player->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	for (int32 Frame = 0; Frame < 30; ++Frame) Player->Tick(1.f / 60.f);
+	TestFalse(TEXT("Without route anchors there is nowhere to return to"), Player->ReturnToNearestRoute());
+
+	auto Anchor = [World](const FVector& Location)
+	{
+		AActor* Actor = World->SpawnActor<AActor>(Location, FRotator(0.f, 90.f, 0.f));
+		USceneComponent* Root = NewObject<USceneComponent>(Actor);
+		Actor->SetRootComponent(Root); Root->RegisterComponent(); Actor->SetActorLocation(Location);
+		Actor->Tags.Add(ACarnivalPlayerCharacter::RouteAnchorTag);
+		return Actor;
+	};
+	Box(FVector(300.f, 300.f, 120.f), FVector(150.f, 150.f, 100.f));   // occupies the nearer anchor
+	Anchor(FVector(300.f, 300.f, 98.f));
+	AActor* Clear = Anchor(FVector(-500.f, -500.f, 98.f));
+	TestTrue(TEXT("Trapped player returns to a route anchor"), Player->ReturnToNearestRoute());
+	AddInfo(FString::Printf(TEXT("Return to path: player=%s clear anchor=%s"), *Player->GetActorLocation().ToString(), *Clear->GetActorLocation().ToString()));
+	TestTrue(TEXT("A blocked anchor is skipped for the next clear one"),
+		FVector::Dist2D(Player->GetActorLocation(), Clear->GetActorLocation()) < 220.f);
+	TestTrue(TEXT("Return to path leaves walking movement and collision"), Player->GetCharacterMovement()->MovementMode == MOVE_Walking
+		&& Player->GetCapsuleComponent()->GetCollisionEnabled() == ECollisionEnabled::QueryAndPhysics);
+	TestFalse(TEXT("Return to path clears pending recovery"), Player->CanRecoverToSafePosition());
 	return true;
 }
 #endif

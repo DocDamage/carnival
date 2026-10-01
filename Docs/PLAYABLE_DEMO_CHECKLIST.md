@@ -1,5 +1,26 @@
 # Playable demo checklist
 
+Current progress is recorded in [the September 30 completion record](COMPLETION_PASS_20260930.md).
+The full supplied scope is preserved in [the September 30 scope](DEMO_SCOPE_20260930.md).
+Three-slot story/player/door/building saves and a controller-accessible pause menu
+now have native coverage; both native targets compile and the full suite passes
+39/39 without warnings. Six pause/confirmation screenshots are reviewed down to 640×480.
+All 240 guests now pass actual lane-roaming simulation over 40 game seconds at
+arrival and near viewpoints. A missing medium-LOD actor reference is repaired;
+near-view spacing/avoidance, rendered locomotion and queueing remain open.
+The ride-parent empty-announcement-array warning is repaired and covered by a
+native regression test. All 240 initial guest positions are now distinct, and
+the owned crowd actor safely handles appearance assignment after BeginPlay.
+Fresh populated spacing and visual acceptance are still required: the latest
+rendered movement run eliminates exact coincidences but retains close pairs
+and unacceptable character/material appearance. A rendered comparison and fresh
+saved-content review now confirm improved night visibility with moderate lower-sky
+bounce. Compact activity titles and the local stunt-rally HUD prompt are reviewed;
+grey faces, clothing/body intersections, crowd bunching and full appearance remain open.
+The reference PC is confirmed at 30 FPS minimum / 60 FPS target; populated
+packaged performance, full save scope and physical controller acceptance remain
+open. Historical entries below retain their original scope and limits.
+
 Audit: September 27, 2026. Baseline implementation commit: `be6dff0b`.
 
 Latest completion pass: [current implementation and acceptance evidence](COMPLETION_PASS_20260929.md).
@@ -96,6 +117,7 @@ This checklist comes from the current source, setup scripts, integration records
 7. **Make the mansion's playable rooms work.**
    - [ ] Check player and camera clearance on stairs, doorways, landings, furniture, and the selected escape route.
    - [ ] Make required doors usable and visibly close off rooms that are outside the demo.
+     - October 1: every vendor `BP_Door*` (mansion and hospital) now opens and closes on context interact (`UCarnivalDoorSubsystem`, HUD "Open door"/"Close door", native `Carnival.World.VendorDoors`). In PIE, all probed non-mission doors opened, and the character walked through every probed doorway except the hospital double door `BP_Door_02a2`. The music-room door stays mission-keyed. Closing off out-of-demo rooms is still open.
    - [ ] Verify floor/wall collision, item reachability, lighting readability, and the motorcycle parking/dismount area at the entrance.
    - September 28 unsaved PIE walk checks add live room evidence: from a seeded foyer floor 92 approach, the real CharacterMovement capsule crossed to west landing floor 93 and reached the study table approach via floor 90/39/40 in 7.83 s; the reverse route returned to floor 92 in 7.68 s. Study-to-music-room and return legs passed in 5.56/5.54 s. The crowd spawner was removed only from the transient test world; the connected map was not saved. Direct shortcuts correctly collide with `SM_InnerStairs2` and `SM_InnerWall_wall4`, while the capsule-clear waypoint route avoids them. This is movement/collision evidence from teleport-seeded room approaches; item interactions, visible door use, camera/mesh clearance, lighting, NPC navigation, and the outside-to-entry walk remain unchecked. Evidence: `Saved/MansionConnection/RoomWalk_PIE_foyer92_to_study_full_path.json`, `RoomWalk_PIE_study_to_foyer92_full_path.json`, `RoomWalk_PIE_study_to_music_path.json`, `RoomWalk_PIE_music_to_study_path.json`, `Mission_Room_Routes.json`, and `Scripts/playtest_mansion_room_walk_pie.py`.
 
@@ -116,6 +138,7 @@ This checklist comes from the current source, setup scripts, integration records
    - [ ] Correct the washed-out slum, hospital approach, and interior views while preserving Carnival night and worsening weather toward the hospital.
      - September 27 continuation: the principal white glare was traced to five daylight-emissive coastal backdrop planes. Local night material variants and six sodium-light color corrections are saved, and six connected-world captures were inspected. Strong glare is resolved; path readability, backdrop edges, apparent geometry gaps, and true hospital-interior camera/traversal checks remain. Evidence: `Saved/IndustrialHospital/Previews/CorrectedAtmosphere/Capture_Report.json`.
    - [ ] Verify factory-facade and entrance alignment; traverse the complete hospital interior and check doors, collision, lighting, audio, and access to all intended rooms.
+     - October 1: the upper floors are open (stairwell blocking volumes and 15 barricades removed). Doorway-blocking props were moved, and invisible guards cover the floor holes that led into rooms with no exit. The 50 cm audit finds 17,997 cells reachable, all returnable, with no traps. Rendered lighting/audio review and a full manual traversal remain.
    - [ ] Cook and test the hospital sublevels and their local asset dependencies in the standalone Windows build. The hospital's role in the story still needs design.
 
 10. **Finish the characters and animation transitions that appear in the demo.**
@@ -168,7 +191,8 @@ This checklist comes from the current source, setup scripts, integration records
     - [ ] Include building, advanced parkour, boats, hovercraft, advanced motorcycle stunts, and additional physics modes; finish their controls, feedback, recovery, and acceptance tests. The current arcade ramp code clears its launch velocity immediately.
 
 17. **Profile and stabilize the full scene.**
-    - [ ] Select the target PC specification and frame-rate target, then measure CPU/GPU frame time, RAM, VRAM, loading, and hitches with crowds, rides, motorcycle, lighting, and doll active.
+    - [x] Establish the reference PC and frame-rate target: scanned i5-14600K, 48 GB RAM, RTX 3060 12 GB; user confirmed 30 FPS minimum / 60 FPS target. Evidence and initial 1080p benchmark settings: `Docs/PERFORMANCE_TARGET.md`.
+    - [ ] Measure CPU/GPU frame time, RAM, VRAM, loading, and hitches in the freshly packaged, populated game with crowds, rides, motorcycle, lighting, and doll active.
     - [ ] Tune character/groom/outfit LODs, foliage, shadows, culling, texture streaming, and crowd density. Use distance-based world loading if measurements show the always-loaded areas are too costly.
     - [ ] Profile the existing `r.RDG.ParallelExecute=0` crash workaround; it can increase CPU rendering time. Confirm stability over repeated full runs.
     - [ ] Investigate coastal spline-construction warnings and material compatibility issues; fix those that affect runtime behavior, packaging, or stability.
@@ -186,7 +210,7 @@ This checklist comes from the current source, setup scripts, integration records
 
 **Additional discussed scope now included in the first demo**
 
-- Connect and make playable the previously discussed Town, Lighthouse, Castle, Arena, and Mars locations, with their intended travel links and complete play flows.
+- Town, Lighthouse, Castle, Arena and Mars are no longer in scope (user direction, September 30, 2026).
 - Include the discussed adult/child character roster and animation content alongside every Carnival ride.
 - Include full combat, extensive parkour, building, boats, hovercraft, advanced motorcycle stunts, and additional physics modes.
 - Include the discussed larger inventory, long campaign, and multi-slot save system. Their detailed content, design, and acceptance criteria still need specification.
@@ -195,7 +219,7 @@ These items were previously described as deferred; the user's latest direction b
 
 **Acceptance test**
 
-A new player can launch a packaged Windows executable and use a controller alone to play the full first-demo scope: Carnival, coastal wetlands/bridge, mansion story, industrial slums and explorable hospital, plus Town, Lighthouse, Castle, Arena, Mars, and the other discussed systems. They can use every ride with attendants, applicable operator controls, combat, parkour, building, boats/hovercraft, motorcycle features, the full discussed character/animation roster, long-form story, inventory, and save slots. The missing-worker/music-box story ends with the worker found alive and the player able to return to Carnival free play; scripted scares never cause death or failure. Restart, quit, safe recovery, keyboard/mouse use, intended NPC population, visuals, audio, and the agreed performance target all work in the packaged build.
+A new player can launch a packaged Windows executable and use a controller alone to play the full first-demo scope: Carnival, coastal wetlands/bridge, mansion story, industrial slums and explorable hospital, the connected Prison, Labs, Sewers, Atlantis, Shipwreck and both Docks, and the other discussed systems. They can use every ride with attendants, applicable operator controls, combat, parkour, building, boats/hovercraft, motorcycle features, the full discussed character/animation roster, long-form story, inventory, and save slots. The missing-worker/music-box story ends with the worker found alive and the player able to return to Carnival free play; scripted scares never cause death or failure. Restart, quit, safe recovery, keyboard/mouse use, intended NPC population, visuals, audio, and the agreed performance target all work in the packaged build.
 
 **Audit references**
 
@@ -204,3 +228,10 @@ A new player can launch a packaged Windows executable and use a controller alone
 - `Docs/CARNIVAL_INTEGRATION_STATUS.md` and the ride/crowd integration documents in `Plugins/CarnivalMetaHumanKit/Docs` (some sections are historical).
 - `Source/CarnivalGame/CarnivalPlayerController.cpp`, `CarnivalPlayerCharacter.cpp`, `CarnivalMotorcycle.cpp`, `CarnivalWeaponBase.cpp`, `CarnivalActivityBase.cpp`, and `CarnivalTargetActor.cpp`.
 - `Config/DefaultEngine.ini`, `Config/DefaultGame.ini`, and `CarnivalGame.uproject`.
+
+## World playability pass (2026-10-01)
+
+- [x] Docks: the North Dock End Platform and all three East Dock loading fingers are linked by graded 4 m decks. Both dock audits show every deck reachable and returnable.
+- [x] Swimming: river (North Dock and the whole river band), flooded Atlantis and Shipwreck. Swim, float, dive, seabed walking, climb-out, swim animations and the underwater look, plus native `Carnival.Player.SwimAndSeabed`. Rendered PIE evidence: `Saved/CharacterRepairs/WaterPIE_v2_20261001`.
+- [ ] Shipwreck: the vendor `UnderwaterShip` sublevels (`Ship`, `SetDressing_Interior`, `SetDressing_Exterior`) are referenced but not loaded, so the wreck itself is missing in play.
+- [ ] Swimming has no dedicated underwater-stroke, dive or climb-out animations (the project has only four surface swim loops).

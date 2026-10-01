@@ -18,6 +18,16 @@ class CARNIVALGAME_API ACarnivalPlayerController : public APlayerController
 	GENERATED_BODY()
 
 public:
+	UFUNCTION(BlueprintCallable, Category="Session") void ToggleSessionMenu();
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Session") bool bSessionMenuOpen = false;
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Session") int32 SessionMenuSelection = 0;
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Session") int32 SelectedSaveSlot = 0;
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Session") int32 SessionMenuConfirmation = -1;
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Session") FString SessionMenuFeedback;
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Session") FString SelectedSaveSummary;
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Session") bool bSessionRecordsOpen = false;
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Session") bool bJournalTab = false;
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Session") int32 RecordsPage = 0;
 	ACarnivalPlayerController();
 	virtual bool InputKey(const FInputKeyEventArgs& Params) override;
 
@@ -198,6 +208,10 @@ public:
 	TArray<FControlBinding> ControlBindings;
 
 protected:
+	void HandleSessionMenuInput(const FInputKeyEventArgs& Params);
+	void ActivateSessionMenuChoice();
+	void RefreshSaveSummary();
+	bool bReturnToSessionMenu = false;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void SetupInputComponent() override;
@@ -230,6 +244,8 @@ protected:
 	void OnStartSprint();
 	void OnStopSprint();
 	void OnToggleCrouch();
+	void OnCrouchReleased();
+	void OnJumpVaultReleased();
 	void OnToggleProne();
 	void OnInteractMount();
 	void OnAttack();

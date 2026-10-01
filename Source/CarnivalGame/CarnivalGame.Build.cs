@@ -29,6 +29,6 @@ public class CarnivalGame : ModuleRules
         });
 
         if (Target.bBuildEditor)
-            PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "Landscape", "Foliage" });
+            PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "Landscape", "Foliage", "BlueprintGraph" });
 	}
 }

@@ -27,7 +27,22 @@ def resample(source, spacing=650.0):
     return out
 
 outer_controls=REGION.get("outer_route_spine",{}).get("controls_cm") or CONNECTIONS["R03"]["route"].get("spine_controls_cm")
+# Optional per-control overrides, e.g. the Prison junction must pass the 2.9 m gap between
+# SM_WallEntry and SM_WallEntryInt rather than the outer wall's end column at its pivot.
+_overrides={"-30000,-25000":[-30158,-24842,600]}  # verified gap: OuterSpineGateGap_Walk_20261001
+_overrides.update(json.loads(os.environ.get("CARNIVAL_SPINE_CONTROL_OVERRIDES","{}")))
+outer_controls=[list(_overrides.get(f"{c[0]:.0f},{c[1]:.0f}",c)) for c in outer_controls]
 outer=resample(catmull(outer_controls))
+def drop_overshoot_lobes(points):
+    """Remove Catmull overshoot lobes (a >120-degree hairpin); the world corner is a flat slab (SpineHairpinFix_20261001)."""
+    i=1
+    while i<len(points)-1:
+        a,b,c=points[i-1],points[i],points[i+1]
+        turn=abs((math.degrees(math.atan2(c[1]-b[1],c[0]-b[0])-math.atan2(b[1]-a[1],b[0]-a[0]))+180)%360-180)
+        if turn>120: points=points[:max(i-2,1)]+points[i+2:]; i=max(i-3,1); continue
+        i+=1
+    return points
+outer=drop_overshoot_lobes(outer)
 lab=resample(catmull(CONNECTIONS["R09"]["route"]["controls_cm"]))
 service=resample(catmull(CONNECTIONS["R10"]["route"]["controls_cm"]))
 stair=CONNECTIONS["R10"]["stair"]

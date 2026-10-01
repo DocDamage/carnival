@@ -62,7 +62,7 @@ if not note:
 note.set_actor_label(NOTE_LABEL)
 note.set_folder_path("Mission/Mansion/Foyer Clue")
 note.set_actor_location(note_location, False, True)
-note.set_actor_rotation(unreal.Rotator(0.0, 14.0, 0.0), False)
+note.set_actor_rotation(unreal.Rotator(roll=0.0, pitch=0.0, yaw=14.0), False)
 component = note.get_component_by_class(unreal.StaticMeshComponent)
 component.set_static_mesh(mesh)
 component.set_collision_profile_name("NoCollision")

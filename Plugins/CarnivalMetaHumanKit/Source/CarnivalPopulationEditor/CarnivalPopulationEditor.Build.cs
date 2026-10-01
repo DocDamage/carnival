@@ -26,8 +26,14 @@ public class CarnivalPopulationEditor : ModuleRules
             "MassLOD",
             "MassRepresentation",
             "MassCrowd",
-            "ZoneGraph"
+            "ZoneGraph",
+            "MassAIBehavior",
+            "MassNavigation",
+            "MassMovement",
+            "MassZoneGraphNavigation",
+            "StateTreeModule",
+            "StateTreeEditorModule"
         });
-        PrivateDependencyModuleNames.AddRange(new string[] { "Landscape", "Foliage" });
+        PrivateDependencyModuleNames.AddRange(new string[] { "Landscape", "Foliage", "PropertyBindingUtils", "BlueprintGraph", "MetaHumanCharacterEditor", "TextureGraph", "RHI", "Json", "MeshDescription", "StaticMeshDescription" });
     }
 }

@@ -11,12 +11,15 @@
 #include "CarnivalAudioSettingsSubsystem.h"
 #include "CarnivalActivityBase.h"
 #include "CarnivalBuildComponent.h"
+#include "CarnivalMissionSubsystem.h"
+#include "CarnivalSaveSubsystem.h"
 #include "CarnivalRideOperationComponent.h"
 #include "CarnivalHUD.h"
 #include "InputKeyEventArgs.h"
 #include "Blueprint/UserWidget.h"
 #include "Engine/GameInstance.h"
 #include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "Misc/ConfigCacheIni.h"
 
 namespace
@@ -56,7 +59,7 @@ bool ACarnivalPlayerController::InputKey(const FInputKeyEventArgs& Params)
 	{
 		// Resume on the first deliberate input from either a reconnected controller or keyboard/mouse.
 		bControllerDisconnectPaused = false;
-		SetPause(false);
+		SetPause(bSessionMenuOpen || bSettingsMenuOpen);
 	}
 
 	// Stick drift should not replace keyboard prompts.
@@ -65,6 +68,11 @@ bool ACarnivalPlayerController::InputKey(const FInputKeyEventArgs& Params)
 	if (Params.IsGamepad() && Params.Event != IE_Released && FMath::Abs(Params.AmountDepressed) > .2f && Params.InputDevice.IsValid())
 		LastActiveGamepadDeviceId = Params.InputDevice;
 
+	if (bSessionMenuOpen)
+	{
+		HandleSessionMenuInput(Params);
+		return true;
+	}
 	if (bSettingsMenuOpen)
 	{
 		if (bControlRemappingOpen) HandleControlRemappingInput(Params);
@@ -74,11 +82,128 @@ bool ACarnivalPlayerController::InputKey(const FInputKeyEventArgs& Params)
 
 	if (Params.Event == IE_Pressed && (Params.Key == EKeys::Escape || Params.Key == EKeys::Gamepad_Special_Right))
 	{
-		ToggleSettingsMenu();
+		ToggleSessionMenu();
 		return true;
 	}
 
 	return Super::InputKey(Params);
+}
+
+void ACarnivalPlayerController::ToggleSessionMenu()
+{
+	if (bSessionMenuOpen)
+	{
+		bSessionMenuOpen = false;
+		bSessionRecordsOpen = false;
+		SessionMenuConfirmation = -1;
+		FlushPressedKeys();
+		SetPause(false);
+		return;
+	}
+	if (!SetPause(true)) return;
+	ClearCurrentPawnInputs(false);
+	bSessionMenuOpen = true;
+	bSessionRecordsOpen = false;
+	SessionMenuSelection = 0;
+	SessionMenuConfirmation = -1;
+	SessionMenuFeedback.Reset();
+	RefreshSaveSummary();
+}
+
+void ACarnivalPlayerController::RefreshSaveSummary()
+{
+	const auto* Saves = GetGameInstance() ? GetGameInstance()->GetSubsystem<UCarnivalSaveSubsystem>() : nullptr;
+	SelectedSaveSummary = Saves ? Saves->GetSlotSummary(SelectedSaveSlot) : TEXT("Unavailable");
+}
+
+void ACarnivalPlayerController::HandleSessionMenuInput(const FInputKeyEventArgs& Params)
+{
+	if (Params.Event != IE_Pressed && Params.Event != IE_Repeat) return;
+	const FKey Key = Params.Key;
+	if (bSessionRecordsOpen)
+	{
+		if (Key == EKeys::Escape || Key == EKeys::Gamepad_FaceButton_Right || Key == EKeys::Gamepad_Special_Right)
+			bSessionRecordsOpen = false;
+		else if (Key == EKeys::Left || Key == EKeys::Gamepad_DPad_Left) { bJournalTab = !bJournalTab; RecordsPage = 0; }
+		else if (Key == EKeys::Right || Key == EKeys::Gamepad_DPad_Right) { bJournalTab = !bJournalTab; RecordsPage = 0; }
+		else if (Key == EKeys::Up || Key == EKeys::Gamepad_DPad_Up) RecordsPage = FMath::Max(0, RecordsPage - 1);
+		else if (Key == EKeys::Down || Key == EKeys::Gamepad_DPad_Down) RecordsPage = FMath::Min(100, RecordsPage + 1);
+		return;
+	}
+	if (Key == EKeys::Escape || Key == EKeys::Gamepad_FaceButton_Right || Key == EKeys::Gamepad_Special_Right)
+	{
+		if (SessionMenuConfirmation >= 0) SessionMenuConfirmation = -1;
+		else ToggleSessionMenu();
+		return;
+	}
+	if (SessionMenuConfirmation < 0)
+	{
+		if (Key == EKeys::Up || Key == EKeys::Gamepad_DPad_Up) SessionMenuSelection = (SessionMenuSelection + 9) % 10;
+		else if (Key == EKeys::Down || Key == EKeys::Gamepad_DPad_Down) SessionMenuSelection = (SessionMenuSelection + 1) % 10;
+		else if (SessionMenuSelection == 1)
+		{
+			if (Key == EKeys::Left || Key == EKeys::Gamepad_DPad_Left) SelectedSaveSlot = (SelectedSaveSlot + 2) % 3;
+			if (Key == EKeys::Right || Key == EKeys::Gamepad_DPad_Right) SelectedSaveSlot = (SelectedSaveSlot + 1) % 3;
+			if (Key == EKeys::Left || Key == EKeys::Gamepad_DPad_Left || Key == EKeys::Right || Key == EKeys::Gamepad_DPad_Right) RefreshSaveSummary();
+		}
+	}
+	// Holding confirm cannot both open and accept a destructive confirmation.
+	if (Params.Event == IE_Pressed && (Key == EKeys::Enter || Key == EKeys::Gamepad_FaceButton_Bottom))
+		ActivateSessionMenuChoice();
+}
+
+void ACarnivalPlayerController::ActivateSessionMenuChoice()
+{
+	const int32 Choice = SessionMenuConfirmation >= 0 ? SessionMenuConfirmation : SessionMenuSelection;
+	if (Choice == 0) { ToggleSessionMenu(); return; }
+	if (Choice == 1) { SelectedSaveSlot = (SelectedSaveSlot + 1) % 3; RefreshSaveSummary(); return; }
+	if (Choice == 7 || Choice == 8)
+	{
+		bSessionRecordsOpen = true; bJournalTab = Choice == 8; RecordsPage = 0; return;
+	}
+	if (Choice == 5)
+	{
+		bSessionMenuOpen = false;
+		bReturnToSessionMenu = true;
+		ToggleSettingsMenu();
+		return;
+	}
+	if (SessionMenuConfirmation < 0)
+	{
+		SessionMenuConfirmation = Choice;
+		return;
+	}
+	SessionMenuConfirmation = -1;
+	auto* SessionCharacter = Cast<ACarnivalPlayerCharacter>(GetPawn());
+	auto* Saves = GetGameInstance()->GetSubsystem<UCarnivalSaveSubsystem>();
+	if (Choice == 2 || Choice == 3)
+	{
+		const bool bSuccess = Choice == 2 ? Saves->SaveSlot(SelectedSaveSlot, SessionCharacter) : Saves->LoadSlot(SelectedSaveSlot, SessionCharacter);
+		SessionMenuFeedback = Saves->LastResult;
+		RefreshSaveSummary();
+		if (bSuccess && Choice == 3)
+		{
+			GetGameInstance()->GetSubsystem<UCarnivalMissionSubsystem>()->ShowPlayerFeedback(FText::FromString(Saves->LastResult));
+			ToggleSessionMenu();
+		}
+	}
+	else if (Choice == 4)
+	{
+		const bool bSuccess = SessionCharacter && !SessionCharacter->IsUsingRide() && !SessionCharacter->MountedMotorcycle
+			&& !SessionCharacter->MountedBoat && !SessionCharacter->MountedHovercraft && !SessionCharacter->IsParkourTraversing()
+			&& !SessionCharacter->ActiveActivity && GetGameInstance()->GetSubsystem<UCarnivalMissionSubsystem>()->RetryStoryMission();
+		SessionMenuFeedback = bSuccess ? TEXT("Investigation restarted. Return to the mansion.") : TEXT("Finish the current action before retrying an active investigation.");
+	}
+	else if (Choice == 6) UKismetSystemLibrary::QuitGame(this, this, EQuitPreference::Quit, false);
+	else if (Choice == 9)
+	{
+		if (SessionCharacter && SessionCharacter->ReturnToNearestRoute())
+		{
+			GetGameInstance()->GetSubsystem<UCarnivalMissionSubsystem>()->ShowPlayerFeedback(FText::FromString(TEXT("Returned to the nearest path.")));
+			ToggleSessionMenu();
+		}
+		else SessionMenuFeedback = TEXT("Leave the ride, vehicle or activity first. No clear path point was found nearby.");
+	}
 }
 
 void ACarnivalPlayerController::OnUnPossess()
@@ -118,6 +243,8 @@ void ACarnivalPlayerController::ClearCurrentPawnInputs(bool bLeaveRideOperator)
 	{
 		CarnivalCharacter->StopSprinting();
 		CarnivalCharacter->StopJumping();
+		CarnivalCharacter->SetSwimUpHeld(false);
+		CarnivalCharacter->SetSwimDownHeld(false);
 		CarnivalCharacter->ConsumeMovementInputVector();
 		if (bLeaveRideOperator) CarnivalCharacter->LeaveRideOperator();
 	}
@@ -339,6 +466,8 @@ void ACarnivalPlayerController::SetupInputComponent()
 		if (JumpVaultAction)
 		{
 			EnhancedInputComponent->BindAction(JumpVaultAction, ETriggerEvent::Started, this, &ACarnivalPlayerController::OnJumpVault);
+			EnhancedInputComponent->BindAction(JumpVaultAction, ETriggerEvent::Completed, this, &ACarnivalPlayerController::OnJumpVaultReleased);
+			EnhancedInputComponent->BindAction(JumpVaultAction, ETriggerEvent::Canceled, this, &ACarnivalPlayerController::OnJumpVaultReleased);
 		}
 		if (SprintAction)
 		{
@@ -349,6 +478,8 @@ void ACarnivalPlayerController::SetupInputComponent()
 		if (CrouchAction)
 		{
 			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Started, this, &ACarnivalPlayerController::OnToggleCrouch);
+			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Completed, this, &ACarnivalPlayerController::OnCrouchReleased);
+			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Canceled, this, &ACarnivalPlayerController::OnCrouchReleased);
 		}
 		if (ProneAction)
 		{
@@ -509,6 +640,8 @@ void ACarnivalPlayerController::OnJumpVault()
 	{
 		if (IsValid(Char->OperatingRide)) { Char->OperatingRide->OperatorStop(Char); return; }
 		if (Char->IsUsingRide()) return;
+		// In water, jump is held to swim up (and lifts off the bottom).
+		if (Char->IsInWaterVolume()) { Char->SetSwimUpHeld(true); return; }
 		if (!Char->TryLadderClimb() && !Char->TryVaultOrMantle())
 		{
 			Char->Jump();
@@ -572,12 +705,24 @@ void ACarnivalPlayerController::OnStopSprint()
 	}
 }
 
+void ACarnivalPlayerController::OnJumpVaultReleased()
+{
+	if (ACarnivalPlayerCharacter* Char = Cast<ACarnivalPlayerCharacter>(GetPawn())) Char->SetSwimUpHeld(false);
+}
+
 void ACarnivalPlayerController::OnToggleCrouch()
 {
 	if (ACarnivalPlayerCharacter* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()))
 	{
+		// In water, crouch is held to dive.
+		if (Char->IsInWaterVolume()) { Char->SetSwimDownHeld(true); return; }
 		Char->ToggleCrouch();
 	}
+}
+
+void ACarnivalPlayerController::OnCrouchReleased()
+{
+	if (ACarnivalPlayerCharacter* Char = Cast<ACarnivalPlayerCharacter>(GetPawn())) Char->SetSwimDownHeld(false);
 }
 
 void ACarnivalPlayerController::OnToggleProne()
@@ -838,7 +983,14 @@ void ACarnivalPlayerController::ToggleSettingsMenu()
 	if (ACarnivalHUD* HUD = Cast<ACarnivalHUD>(GetHUD())) HUD->bShowSettingsMenu = bSettingsMenuOpen;
 	SetShowMouseCursor(false);
 	SetInputMode(FInputModeGameOnly());
-	SetPause(bSettingsMenuOpen);
+	if (!bSettingsMenuOpen && bReturnToSessionMenu)
+	{
+		bReturnToSessionMenu = false;
+		bSessionMenuOpen = true;
+		SessionMenuSelection = 5;
+	}
+	FlushPressedKeys();
+	SetPause(bSettingsMenuOpen || bSessionMenuOpen);
 }
 
 void ACarnivalPlayerController::SetMotorcyclePhysicsMode(EMotorcyclePhysicsMode NewMode)

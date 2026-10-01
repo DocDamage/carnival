@@ -25,7 +25,8 @@ enum class ECarnivalMissionInteraction : uint8
 	Worker,
 	MusicBox,
 	MansionExit,
-	CarnivalReturn
+	CarnivalReturn,
+	CampaignStation
 };
 
 /** Placeable story prop/trigger whose action is guarded by the mission subsystem. */
@@ -35,6 +36,8 @@ class CARNIVALGAME_API ACarnivalMissionInteractionActor : public AActor
 	GENERATED_BODY()
 
 public:
+	bool IsSavedDoorOpen() const { return bControlledDoorOpen; }
+	bool RestoreSavedDoor(bool bOpen);
 	ACarnivalMissionInteractionActor();
 	virtual void Tick(float DeltaSeconds) override;
 
@@ -43,6 +46,11 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mission Interaction")
 	ECarnivalMissionInteraction Interaction = ECarnivalMissionInteraction::NoticeBoard;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mission Interaction|Campaign")
+	FName CampaignStationId;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mission Interaction|Campaign", meta=(ClampMin="0", ClampMax="3"))
+	int32 CampaignAction = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mission Interaction|Target")
 	TObjectPtr<AActor> InteractionTargetActor;

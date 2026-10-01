@@ -62,11 +62,11 @@ bool FControllerDisconnectRecoveryTest::RunTest(const FString&)
 	PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_FaceButton_Bottom, IE_Pressed, 1.f, -1, DeviceId));
 	TestFalse(TEXT("Controller input resumes after reconnect"), PC->bControllerDisconnectPaused || World->IsPaused());
 	PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_Special_Right, IE_Pressed, 1.f, -1, DeviceId));
-	TestTrue(TEXT("Options opens a controller-operable settings menu"), PC->bSettingsMenuOpen && World->IsPaused());
+	TestTrue(TEXT("Options opens a controller-operable pause menu"), PC->bSessionMenuOpen && World->IsPaused());
 	PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_DPad_Down, IE_Pressed, 1.f, -1, DeviceId));
-	TestEqual(TEXT("D-pad navigates the paused settings menu"), PC->SettingsMenuSelection, 1);
+	TestEqual(TEXT("D-pad navigates the paused session menu"), PC->SessionMenuSelection, 1);
 	PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_Special_Right, IE_Pressed, 1.f, -1, DeviceId));
-	TestFalse(TEXT("Options closes settings and resumes play"), PC->bSettingsMenuOpen || World->IsPaused());
+	TestFalse(TEXT("Options closes the session menu and resumes play"), PC->bSessionMenuOpen || World->IsPaused());
 	return true;
 }
 #endif

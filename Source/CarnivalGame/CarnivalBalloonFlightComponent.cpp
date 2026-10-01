@@ -13,6 +13,9 @@
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
 #include "Kismet2/BlueprintEditorUtils.h"
+#include "K2Node_CallFunction.h"
+#include "K2Node_IfThenElse.h"
+#include "Kismet/KismetMathLibrary.h"
 #endif
 
 int32 UCarnivalBalloonFlightComponent::RepairRedundantFireAutoActivation(UBlueprint* Blueprint)
@@ -58,6 +61,71 @@ int32 UCarnivalBalloonFlightComponent::RepairRedundantFireAutoActivation(UBluepr
         UEdGraphPin* Next = Output->LinkedTo[0];
         Previous->MakeLinkTo(Next);
         FBlueprintEditorUtils::RemoveNode(Blueprint, Candidate, true);
+        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+        return 1;
+    }
+#endif
+    return -1;
+}
+
+int32 UCarnivalBalloonFlightComponent::RepairEmptyAnnouncementQueue(UBlueprint* Blueprint)
+{
+#if WITH_EDITOR
+    if (!Blueprint || Blueprint->GetPathName() != TEXT("/Game/Creepwood_Carnival_Meshingun/Environment/Blueprint/Ride/Structure/BP_Rides_Parent.BP_Rides_Parent")) return -1;
+    TArray<UEdGraph*> Graphs;
+    Blueprint->GetAllGraphs(Graphs);
+    for (UEdGraph* Graph : Graphs)
+    {
+        if (!Graph || Graph->GetFName() != TEXT("Animation")) continue;
+        auto Find = [&](FName Name) -> UEdGraphNode*
+        {
+            for (UEdGraphNode* Node : Graph->Nodes) if (Node && Node->GetFName() == Name) return Node;
+            return nullptr;
+        };
+        auto Pin = [&](FName Name, FName PinName) -> UEdGraphPin*
+        {
+            auto* Node = Find(Name); return Node ? Node->FindPin(PinName) : nullptr;
+        };
+        auto* Previous = Pin(TEXT("K2Node_ExecutionSequence_13"), TEXT("then_1"));
+        auto* Selection = Pin(TEXT("K2Node_VariableSet_25"), TEXT("execute"));
+        auto* Reset = Pin(TEXT("K2Node_VariableSet_27"), TEXT("execute"));
+        auto* Length = Pin(TEXT("K2Node_CallArrayFunction_11"), TEXT("ReturnValue"));
+        auto* Array = Pin(TEXT("K2Node_CallArrayFunction_11"), TEXT("TargetArray"));
+        if (!Previous || !Selection || !Reset || !Length || !Array || Array->LinkedTo.Num() != 1
+            || Array->LinkedTo[0]->PinName != TEXT("announcementsToPlay_temp") || Length->PinType.PinCategory != TEXT("int")) return -1;
+        auto* Existing = Cast<UK2Node_IfThenElse>(Find(TEXT("Carnival_AnnouncementQueueReady")));
+        if (Existing)
+        {
+            auto* Compare = Cast<UK2Node_CallFunction>(Find(TEXT("Carnival_AnnouncementQueueNotEmpty")));
+            auto* A = Compare ? Compare->FindPin(TEXT("A")) : nullptr;
+            auto* B = Compare ? Compare->FindPin(TEXT("B")) : nullptr;
+            return Compare && Compare->GetTargetFunction()
+                && Compare->GetTargetFunction()->GetFName() == TEXT("Greater_IntInt")
+                && A && A->LinkedTo.Num() == 1 && A->LinkedTo[0] == Length
+                && B && B->LinkedTo.IsEmpty() && B->DefaultValue == TEXT("0")
+                && Previous->LinkedTo.Num() == 1 && Previous->LinkedTo[0] == Existing->GetExecPin()
+                && Existing->GetThenPin()->LinkedTo.Contains(Selection)
+                && Existing->GetElsePin()->LinkedTo.Contains(Reset)
+                && Existing->GetConditionPin()->LinkedTo.Contains(Compare->GetReturnValuePin()) ? 0 : -1;
+        }
+        if (Find(TEXT("Carnival_AnnouncementQueueNotEmpty")) || Previous->LinkedTo.Num() != 1
+            || Previous->LinkedTo[0] != Selection || Selection->LinkedTo.Num() != 1) return -1;
+        auto* GreaterFunction = UKismetMathLibrary::StaticClass()->FindFunctionByName(TEXT("Greater_IntInt"));
+        if (!GreaterFunction) return -1;
+        Blueprint->Modify(); Graph->Modify(); Previous->GetOwningNode()->Modify(); Selection->GetOwningNode()->Modify(); Reset->GetOwningNode()->Modify();
+        auto* Compare = NewObject<UK2Node_CallFunction>(Graph, TEXT("Carnival_AnnouncementQueueNotEmpty"), RF_Transactional);
+        Graph->AddNode(Compare, false, false); Compare->CreateNewGuid(); Compare->SetFromFunction(GreaterFunction); Compare->AllocateDefaultPins();
+        auto* Guard = NewObject<UK2Node_IfThenElse>(Graph, TEXT("Carnival_AnnouncementQueueReady"), RF_Transactional);
+        Graph->AddNode(Guard, false, false); Guard->CreateNewGuid(); Guard->AllocateDefaultPins();
+        Guard->NodeComment = TEXT("Only select/play/remove after refill leaves at least one announcement. Empty rides reset their timer.");
+        Guard->NodePosX = Selection->GetOwningNode()->NodePosX - 280;
+        Guard->NodePosY = Selection->GetOwningNode()->NodePosY;
+        Compare->NodePosX = Guard->NodePosX - 240; Compare->NodePosY = Guard->NodePosY + 160;
+        Compare->FindPinChecked(TEXT("B"))->DefaultValue = TEXT("0");
+        Length->MakeLinkTo(Compare->FindPinChecked(TEXT("A")));
+        Compare->GetReturnValuePin()->MakeLinkTo(Guard->GetConditionPin());
+        Previous->BreakLinkTo(Selection); Previous->MakeLinkTo(Guard->GetExecPin());
+        Guard->GetThenPin()->MakeLinkTo(Selection); Guard->GetElsePin()->MakeLinkTo(Reset);
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
         return 1;
     }

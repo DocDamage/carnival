@@ -25,6 +25,8 @@
     { "Name": "MetaHumanCrowd", "Enabled": true },
     { "Name": "MassGameplay", "Enabled": true },
     { "Name": "MassCrowd", "Enabled": true },
+    { "Name": "MassAI", "Enabled": true },
+    { "Name": "StateTree", "Enabled": true },
     { "Name": "ZoneGraph", "Enabled": true }
   ]
 }

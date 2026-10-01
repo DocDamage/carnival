@@ -50,6 +50,10 @@ class CARNIVALGAME_API UCarnivalMissionSubsystem : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
+	// Save files contain a stable story stage; transient scare playback is never serialized.
+	static bool IsSaveableState(ECarnivalStoryMissionState State);
+	bool RestoreSavedState(ECarnivalStoryMissionState State);
+
 	UFUNCTION(BlueprintCallable, Category = "Story Mission")
 	bool BeginStoryMission();
 
