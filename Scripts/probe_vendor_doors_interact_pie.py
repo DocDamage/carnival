@@ -1,9 +1,9 @@
 """PIE: closed vendor doors open on context interact, and the real character then walks through. No saves."""
-import json,math,time,traceback
+import json,math,os,time,traceback
 from pathlib import Path
 import unreal
 unreal.EditorPythonScripting.set_keep_python_script_alive(True)
-ROOT=Path(r'F:\Carnival');OUT=ROOT/'Saved/WorldExpansion/VendorDoorsInteractPIE_20261001';OUT.mkdir(parents=True,exist_ok=False)
+ROOT=Path(r'F:\Carnival');OUT=ROOT/os.environ.get('CARNIVAL_DOOR_SURVEY_OUT','Saved/WorldExpansion/VendorDoorsInteractPIE_20261001');OUT.mkdir(parents=True,exist_ok=False)
 LE=unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
 assert unreal.EditorLoadingAndSavingUtils.load_map('/Game/Creepwood_Carnival_Meshingun/Environment/Map/LV_Carnival')
 V=unreal.Vector;R={'success':False,'errors':[],'doors':[]}

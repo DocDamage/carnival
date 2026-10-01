@@ -17,7 +17,7 @@ The root map references the expansion as Always Loaded sublevels. Their transfor
 | Docks East | /Game/Carnival/World/Levels/L_CarnivalWorldExpansion_DocksEast | (70000, 15000, 600); 0 deg | Longer, ordered quay using the same imported pack as Docks North. |
 | Sewers | /Game/Carnival/World/Levels/L_CarnivalWorldExpansion_Sewers | (-27100, -12290, -1800); 0 deg | Lower corridor and connection to Atlantis. Sewer entry from the stair: (-27000, -12500, -1800). |
 | Atlantis Ruins | /Game/Carnival/World/Levels/L_CarnivalWorldExpansion_Atlantis | (-13000, -11000, -1800); 0 deg | Ancient interior beyond the sewer tunnel. |
-| Shipwreck | /Game/Carnival/World/Levels/L_CarnivalWorldExpansion_Shipwreck | (-6033.089, -10010, -2108.649); 0 deg | Terminal wreck environment; its supplied ship and set-dressing sublevels are retained. |
+| Shipwreck | /Game/Carnival/World/Levels/L_CarnivalWorldExpansion_Shipwreck | (-6033.089, -10010, -5008.649); 0 deg (sunk 29 m on 2026-10-01) | Terminal wreck environment. The wreck streams from project copies `L_CarnivalWorldExpansion_ShipwreckHull` (masts removed), `...DressingInterior` and `...DressingExterior` at the same offset, inside a sealed rock cavern under the Atlantis floor. |
 | Generated connectors | /Game/Carnival/World/Levels/L_CarnivalWorldExpansion_Connections_Layout | (0, 0, 0); 0 deg | Shared outer route, Lab route, Prison service walk/stairs, and sealed lower tunnels. |
 
 The root map still references the existing Carnival, wetlands/train bridge, mansion, Hospital, and Slums levels. The single linked connector level is L_CarnivalWorldExpansion_Connections_Layout; an older partial L_CarnivalWorldExpansion_Connections map is not linked.
@@ -37,7 +37,7 @@ The root map still references the existing Carnival, wetlands/train bridge, mans
 | R09 | Prison ↔ Research Lab | Separate surface spur | 205.14 m | Authored; player traversal pending. |
 | R10 | Prison ↔ Sewers | Service walk plus reversible interior stair | 67.12 m walk + 65 m stair; 24 m drop | Authored as 120 steps; collision and traversal pending. |
 | R11 | Sewers ↔ Atlantis Ruins | Sealed passage | 82.11 m | Authored, 360 cm wide and 460 cm clear. Walks both ways; flooded from x -21000 onward (see Water and swimming). |
-| R12 | Atlantis Ruins ↔ Shipwreck | Sealed passage | 14.28 m | Authored, 420 cm wide and 520 cm clear. Walks both ways; fully flooded. |
+| R12 | Atlantis Ruins ↔ Shipwreck | Flooded shaft | about 27 m deep | Swim down the Atlantis floor opening (x -7100..-5650, y -11300..-9500) onto the main deck and on to the seabed station. The old tunnel boxes were removed 2026-10-01. Swims both ways in PIE (`ShipwreckDeep_20261001/dive_playtest.json`). |
 
 R01 and R02 meet opposite ends of the Coastal Train Bridge. The bridge interior itself is 577.40 m in the saved route layout; it belongs to the bridge region between those endpoint thresholds. The outer path from the Carnival gate through the bridge interior to the Mansion driveway totals 1028.48 m.
 
@@ -121,7 +121,7 @@ These runs use scripted movement input, not a physical controller. Boat and hove
 | Prison | All anchors and the archive desk are reachable and returnable; no traps. Some sealed building floors and rooftops are unreachable. |
 | Slums | All anchors and the workshop desk are reachable and returnable. Six tiny terrain dips (1-9 m2) are one-way; Return to path covers them. |
 | Hospital (all floors) | **Opened and fixed.** The stairwell `BlockingVolume`s and 15 debris barricades were removed (`HospitalUpperFloorsOpened_20261001`), so all storeys up to z 1543 are reachable. Holes in the upper floors then dropped players into three closed ground-floor rooms and onto wall tops. Five doorway-blocking props (a corpse, bench, bookshelf, treatment table) were slid aside (`HospitalDoorwayBlockers_20261001`). Six invisible slabs (`Hospital_HoleGuard_*`, block all but the camera) now cover the holes that led into spaces with no exit (`HospitalHoleGuards_20261001`). The 50 cm audit: 17,997 cells reachable, all returnable, no traps (`hospital_fine_guarded2_20261001`). |
-| Sewers, Atlantis, Shipwreck | R10-R12 walk both ways in PIE. Grid gaps at sloped tunnel floors are audit artefacts. Sewer side sections (`Cube4` floors) beyond closed doors are unreachable. Atlantis and the Shipwreck are now flooded (see Water and swimming). The Shipwreck level references the vendor `UnderwaterShip` sublevels (`Ship`, `SetDressing_Interior`, `SetDressing_Exterior`), but they are not loaded in the composed world, so the wreck shows only its platforms. |
+| Sewers, Atlantis, Shipwreck | R10-R12 walk both ways in PIE. Grid gaps at sloped tunnel floors are audit artefacts. Sewer side sections (`Cube4` floors) beyond closed doors are unreachable. Atlantis and the Shipwreck are now flooded (see Water and swimming). The wreck now loads: it was sunk into a sealed cavern below Atlantis on 2026-10-01 (`author_shipwreck_deep_wreck.py`) and R12 became a swim down the shaft. |
 | North Docks | **Fixed.** The spine crossed the docks as a slab 55-110 cm above the decks, so stepping down was one-way. Spine slabs are now flush on the Sandy Arrival and the piers, with transitions of at most 6 degrees. All decks are reachable and returnable. The End Platform is now joined to the Bent Quay by `NorthDock_EndPlatform_Link`, a 4 m deck graded from 635 to 645 (`DockPieceLinks_20261001`). The river under the piers is swimmable; a swimmer climbs out onto the boarding float and walks up the boat ramp to the pier (`RoomExitsClimbOut_20261001`). |
 | East Docks | **Fixed.** Quay Approach (580) and Through Walk (625) were raised to 640 to meet the Main Quay (645), and the spine is flush across the decks. No traps. Each loading finger is now joined to the Main Quay by a 4 m deck graded from 645 to 660 (`EastDock_Finger_Link_*`). Every deck is reachable and returnable (`docks_east_linked_20261001`). The East Dock stands on dry ground, so there is no water there. |
 
@@ -131,6 +131,11 @@ The dock levelling uses a continuous profile along the spine (`fix_dock_spine_pr
 
 The 65 vendor `BP_Door*` actors (hospital and mansion) used to stay in their authored pose. `UCarnivalDoorSubsystem` now makes them usable. Context interact near a door swings its leaves 90 degrees away from the player, or closes an open door, over 0.6 s; the HUD shows "Open door" or "Close door". Leaves are the plate meshes (`*Door_Plate*`, `SM_Door02_D/E`), and the closed pose is the frame's yaw. Static leaves are made movable when first used. The music-room door stays under its mission interaction. Native test `Carnival.World.VendorDoors`. In PIE, every probed non-mission door opened, and the character walked through every probed doorway except the hospital double door `BP_Door_02a2`, which stops it about 36 cm past the frame (`VendorDoorsInteractPIE_20261001`, `WaterPIE_v2_20261001`).
 
+Update 2026-10-01:
+- `BP_Door_02a2` opens onto a wall with no floor behind it. It is now sealed with the `CarnivalSealedDoor` tag, which the subsystem never opens.
+- A door now counts as open only when every leaf is open. Vendor double doors authored with one leaf ajar (`02a4`, `02a6`) therefore open fully on the first press instead of closing.
+- PIE walks pass both ways through `02a4`, `02a6` and `04a3` (`HospitalDoorwayWalks_20261001.json`, `VendorDoorsInteractPIE_AfterAjarFix_20261001`).
+
 ## Water and swimming (2026-10-01)
 
 Swimming water is `ACarnivalWaterVolume`, a box physics volume sized by `WaterExtent` whose box is built into the brush collision. Engine swimming, surface floating and leaving the water all behave as normal UE water. All volumes are in the always-loaded connectors level.
@@ -139,7 +144,7 @@ Swimming water is `ACarnivalWaterVolume`, a box physics volume sized by `WaterEx
 | --- | --- | --- |
 | River (incl. North Dock) | 59 `Water_River_*` boxes, surface -240 | The `WaterBodyRiver` is a 1 km wide sheet at z -240; its water shows wherever the landscape dips below that level. 50 m cells inside the band, from 2 m below the local riverbed up to the surface, merged along X (`WaterVolumesRiver_v2_20261001`). The editor-only far-terrain mesh `SM_Landscape_Far_01a` covers the docks in the editor and must be ignored by editor traces. |
 | Dry override | `Water_DryOverride_SewersAndStair` (not water, priority 20) | Keeps the prison stair, Sewers and sewer tunnel dry even where the river band lies above them. |
-| Atlantis and Shipwreck | `Water_Flooded_AtlantisShipwreck` (priority 30), x -21000..-4000, z -2500..-500 | Flooded from partway along the sewer tunnel (a translucent waterline sheet, `SewerToAtlantis_Waterline`, marks the start) through both interiors. A solid lid at -500 keeps swimmers in the water. |
+| Atlantis and Shipwreck | `Water_Flooded_AtlantisShipwreck` (priority 30), x -21000..-4000, z -2500..-500 | Flooded from partway along the sewer tunnel (a translucent waterline sheet, `SewerToAtlantis_Waterline`, marks the start) through both interiors. A solid lid at -500 keeps swimmers in the water. Below it, `Water_Flooded_ShipwreckCavern` (priority 29, no lid) fills the wreck cavern, x -10400..-3000, y -12400..-5900, z -5200..-1990. |
 
 Character behaviour (`ACarnivalPlayerCharacter`):
 - **Controls:** hold jump to swim up and hold crouch to dive. Fully under water, forward follows the camera pitch beyond 20 degrees.

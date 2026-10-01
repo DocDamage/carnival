@@ -43,9 +43,9 @@ selected=os.environ.get('CARNIVAL_INTERIOR_CASES','mansion_mission_rooms,hospita
 routes={
     'hospital_entrance':hospital_points(),
     'sewer_corridor':[(-27000,-12500,-1800),(-27100,-12000,-1800),(-27100,-9654,-1800)],
-    # R12's carved opening exposes its 35 cm-thick walkway: center -1800,
-    # upper face approximately -1782.5, not the removed hall slab top -1750.
-    'atlantis_hall':[(-19000,-11000,-1750),(-18500,-11600,-1750),(-7500,-11600,-1750),(-7000,-11000,-1782.5)],
+    # Ends on AtlantisHall_R12_FloorHandoff (top about -1750) at the lip of the shaft down to the sunk wreck;
+    # the old R12 walkway was removed (author_shipwreck_deep_wreck.py) and the dive is playtest_shipwreck_dive.py.
+    'atlantis_hall':[(-19000,-11000,-1750),(-18500,-11600,-1750),(-7500,-11600,-1750),(-7100,-11300,-1750)],
 }
 if 'mansion_mission_rooms' in selected:
     first=load_guide('foyer92_to_study_full_path'); second=load_guide('study_to_music_path')

@@ -97,6 +97,37 @@ bool FVendorDoorInteractionTest::RunTest(const FString&)
 	TestTrue(TEXT("Door finishes its swing"), FMath::IsNearlyEqual(FMath::Abs(FRotator::NormalizeAxis(DoorLeaves(Door)[0]->GetRelativeRotation().Yaw)), 90.f, 0.5f));
 	Player->TryContextInteract();
 	TestFalse(TEXT("Interact again closes it"), Doors->IsDoorOpen(Door));
+
+	// A double door authored with one leaf ajar counts as closed, so the first interact opens it fully.
+	UClass* DoubleDoor = LoadClass<AActor>(nullptr, TEXT("/Game/Hospital_Meshingun/Blueprint/Prefab/BP_Door_02a.BP_Door_02a_C"));
+	if (TestNotNull(TEXT("Hospital double door class loads"), DoubleDoor))
+	{
+		AActor* Ajar = World->SpawnActor<AActor>(DoubleDoor, FVector(0.f, 9000.f, 0.f), FRotator::ZeroRotator);
+		TArray<UStaticMeshComponent*> AjarLeaves = DoorLeaves(Ajar);
+		if (TestEqual(TEXT("Double door has two leaves"), AjarLeaves.Num(), 2))
+		{
+			AjarLeaves[1]->SetMobility(EComponentMobility::Movable);
+			AjarLeaves[1]->SetRelativeRotation(FRotator(0.f, 170.f, 0.f));
+			TestFalse(TEXT("A door with one leaf ajar is not open"), Doors->IsDoorOpen(Ajar));
+			const FBox AjarBox = AjarLeaves[0]->Bounds.GetBox();
+			const FVector AjarSide = AjarBox.GetExtent().X < AjarBox.GetExtent().Y ? FVector(140.f, 0.f, 0.f) : FVector(0.f, 140.f, 0.f);
+			TestTrue(TEXT("Interacting with an ajar door opens it"), Doors->ToggleDoor(Ajar, AjarBox.GetCenter() + AjarSide, true));
+			TestTrue(TEXT("The ajar door is now open"), Doors->IsDoorOpen(Ajar));
+			for (UStaticMeshComponent* Leaf : AjarLeaves)
+			{
+				TestTrue(TEXT("Every leaf ends a quarter turn open"), FMath::IsNearlyEqual(FMath::Abs(FRotator::NormalizeAxis(Leaf->GetRelativeRotation().Yaw)), 90.f, 0.5f));
+			}
+		}
+	}
+
+	// A sealed door (one that leads into a wall or out of the demo) is never offered and never opens.
+	AActor* Sealed = World->SpawnActor<AActor>(HospitalDoor, FVector(0.f, 6000.f, 0.f), FRotator::ZeroRotator);
+	Sealed->Tags.Add(UCarnivalDoorSubsystem::SealedDoorTag);
+	const FBox SealedBox = DoorLeaves(Sealed)[0]->Bounds.GetBox();
+	const FVector SealedSide = SealedBox.GetExtent().X < SealedBox.GetExtent().Y ? FVector(140.f, 0.f, 0.f) : FVector(0.f, 140.f, 0.f);
+	TestTrue(TEXT("A sealed door is not found"), Doors->FindDoorNear(SealedBox.GetCenter() + SealedSide) == nullptr);
+	TestFalse(TEXT("A sealed door does not toggle"), Doors->ToggleDoor(Sealed, SealedBox.GetCenter() + SealedSide, true));
+	TestFalse(TEXT("A sealed door stays closed"), Doors->IsDoorOpen(Sealed));
 	return true;
 }
 #endif

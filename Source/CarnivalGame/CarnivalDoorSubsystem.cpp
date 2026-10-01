@@ -31,9 +31,16 @@ namespace
 	}
 }
 
+const FName UCarnivalDoorSubsystem::SealedDoorTag(TEXT("CarnivalSealedDoor"));
+
 bool UCarnivalDoorSubsystem::IsVendorDoor(const AActor* Actor)
 {
 	return Actor && Actor->GetClass()->GetName().StartsWith(TEXT("BP_Door"));
+}
+
+bool UCarnivalDoorSubsystem::IsSealed(const AActor* Door)
+{
+	return Door && Door->ActorHasTag(SealedDoorTag);
 }
 
 bool UCarnivalDoorSubsystem::IsMissionControlled(const AActor* Door) const
@@ -54,7 +61,7 @@ UCarnivalDoorSubsystem::FDoor* UCarnivalDoorSubsystem::GetDoor(AActor* Door)
 	if (FDoor* Existing = Doors.Find(Door)) return Existing->Leaves.IsEmpty() ? nullptr : Existing;
 
 	FDoor& State = Doors.Add(Door);
-	if (IsMissionControlled(Door)) return nullptr;
+	if (IsMissionControlled(Door) || IsSealed(Door)) return nullptr;
 	TArray<UStaticMeshComponent*> Meshes;
 	Door->GetComponents<UStaticMeshComponent>(Meshes);
 	float FrameYaw = 0.0f;
@@ -62,6 +69,9 @@ UCarnivalDoorSubsystem::FDoor* UCarnivalDoorSubsystem::GetDoor(AActor* Door)
 	{
 		if (IsFrameMesh(Mesh)) { FrameYaw = Mesh->GetRelativeRotation().Yaw; break; }
 	}
+	// Only a door with every leaf swung out counts as open. Vendor double doors are often authored with one leaf
+	// ajar; treating those as open made the first interact slam them shut in the player's face.
+	bool bAllLeavesOpen = true;
 	for (UStaticMeshComponent* Mesh : Meshes)
 	{
 		if (!IsLeafMesh(Mesh)) continue;
@@ -69,8 +79,9 @@ UCarnivalDoorSubsystem::FDoor* UCarnivalDoorSubsystem::GetDoor(AActor* Door)
 		Leaf.Component = Mesh;
 		Leaf.ClosedYaw = FrameYaw;
 		State.Leaves.Add(Leaf);
-		if (FMath::Abs(FRotator::NormalizeAxis(Mesh->GetRelativeRotation().Yaw - FrameYaw)) > 20.0f) State.bOpen = true;
+		if (FMath::Abs(FRotator::NormalizeAxis(Mesh->GetRelativeRotation().Yaw - FrameYaw)) <= 20.0f) bAllLeavesOpen = false;
 	}
+	State.bOpen = bAllLeavesOpen && !State.Leaves.IsEmpty();
 	return State.Leaves.IsEmpty() ? nullptr : &State;
 }
 
@@ -87,7 +98,7 @@ AActor* UCarnivalDoorSubsystem::FindDoorNear(const FVector& Location, float Reac
 	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
 	{
 		AActor* Actor = *It;
-		if (!IsVendorDoor(Actor) || FVector::DistSquared(Actor->GetActorLocation(), Location) > FMath::Square(Reach + 400.0f)) continue;
+		if (!IsVendorDoor(Actor) || IsSealed(Actor) || FVector::DistSquared(Actor->GetActorLocation(), Location) > FMath::Square(Reach + 400.0f)) continue;
 		if (const FDoor* Known = Doors.Find(Actor); Known && Known->Leaves.IsEmpty()) continue;
 		TArray<UStaticMeshComponent*> Meshes;
 		Actor->GetComponents<UStaticMeshComponent>(Meshes);

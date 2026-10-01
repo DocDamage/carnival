@@ -49,7 +49,8 @@ stair=CONNECTIONS["R10"]["stair"]
 stairs=[tuple(stair["start_cm"][k]*(1-i/stair["step_count"])+stair["end_cm"][k]*(i/stair["step_count"]) for k in range(3)) for i in range(stair["step_count"]+1)]
 CASES=[("lab_branch_prison_to_lab",lab),
        ("R10_surface",service), ("R10_stairs",stairs),
-       *[(cid+"_tunnel",resample([CONNECTIONS[cid]["route"]["start_cm"],CONNECTIONS[cid]["route"]["end_cm"]],150.)) for cid in ("R11","R12")],
+       # R12 is a swim down the Atlantis floor shaft since the wreck was sunk; playtest_shipwreck_dive.py covers it.
+       *[(cid+"_tunnel",resample([CONNECTIONS[cid]["route"]["start_cm"],CONNECTIONS[cid]["route"]["end_cm"]],150.)) for cid in ("R11",)],
        ("outer_surface_mansion_to_hospital",outer)]
 selected=os.environ.get("CARNIVAL_EXPANSION_CASES","")
 if selected:

@@ -16,11 +16,12 @@ board attractions, physically sit, react to ride motion, and return to the crowd
 - `Scripts/` — editor Python automation (level scan, component dump, ride wiring).
 - `Config/` — project + ride inventory configuration.
 
-## Important — licensed Creepwood content
+## Important — paid third-party assets are not included
 
-The purchased Creepwood content (`Content/Creepwood_Carnival_Meshingun/`) is **not**
-committed. Add your own licensed copy from the Epic Games Launcher (VaultCache) into
-`Content/Creepwood_Carnival_Meshingun/` before opening the project.
+All environment, character, clothing, hair, animation and audio packs are paid
+third-party assets and are **not** committed. To rebuild the project you must buy
+your own copy of each one. See [Docs/THIRD_PARTY_ASSETS.md](Docs/THIRD_PARTY_ASSETS.md)
+for the full list with store links and the `Content/` path each pack installs to.
 
 ## Build
 
