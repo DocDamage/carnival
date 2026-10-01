@@ -20,7 +20,83 @@
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SCS_Node.h"
 #include "Kismet2/BlueprintEditorUtils.h"
+#include "InstancedFoliageActor.h"
+#include "InstancedFoliage.h"
+#include "FoliageType.h"
 #endif
+
+int32 UCarnivalRouteEditorLibrary::RemoveFoliageInBox(AActor* FoliageActor, FVector WorldMinimum, FVector WorldMaximum, const FString& MeshNameContains)
+{
+#if WITH_EDITOR
+    AInstancedFoliageActor* Foliage = Cast<AInstancedFoliageActor>(FoliageActor);
+    const FBox Box(WorldMinimum, WorldMaximum);
+    const FVector Size = WorldMaximum - WorldMinimum;
+    if (!Foliage || MeshNameContains.IsEmpty() || Size.X <= 0.0 || Size.Y <= 0.0 || Size.Z <= 0.0
+        || Size.X > 2000.0 || Size.Y > 2000.0) return -1;
+    int32 Removed = 0;
+    Foliage->Modify();
+    Foliage->ForEachFoliageInfo([&](UFoliageType* Type, FFoliageInfo& Info)
+    {
+        const UObject* Source = Type ? Type->GetSource() : nullptr;
+        if (!Source || !Source->GetName().Contains(MeshNameContains)) return true;
+        TArray<int32> Inside;
+        for (int32 Index = 0; Index < Info.Instances.Num(); ++Index)
+        {
+            if (Box.IsInsideOrOn(Info.Instances[Index].GetInstanceWorldTransform().GetLocation())) Inside.Add(Index);
+        }
+        if (!Inside.IsEmpty())
+        {
+            Info.RemoveInstances(Inside, true);
+            Removed += Inside.Num();
+        }
+        return true;
+    });
+    return Removed;
+#else
+    return -1;
+#endif
+}
+
+TArray<FString> UCarnivalRouteEditorLibrary::DescribeFoliageInBox(AActor* FoliageActor, FVector WorldMinimum, FVector WorldMaximum)
+{
+    TArray<FString> Lines;
+#if WITH_EDITOR
+    AInstancedFoliageActor* Foliage = Cast<AInstancedFoliageActor>(FoliageActor);
+    if (!Foliage) return Lines;
+    const FBox Box(WorldMinimum, WorldMaximum);
+    TSet<const UActorComponent*> Owned;
+    Foliage->ForEachFoliageInfo([&](UFoliageType* Type, FFoliageInfo& Info)
+    {
+        int32 Inside = 0;
+        for (const FFoliageInstance& Instance : Info.Instances)
+        {
+            if (Box.IsInsideOrOn(Instance.GetInstanceWorldTransform().GetLocation())) ++Inside;
+        }
+        const UHierarchicalInstancedStaticMeshComponent* Component = Info.GetComponent();
+        if (Component) Owned.Add(Component);
+        Lines.Add(FString::Printf(TEXT("info type=%s source=%s component=%s instances=%d inside=%d"),
+            Type ? *Type->GetName() : TEXT("null"), Type && Type->GetSource() ? *Type->GetSource()->GetName() : TEXT("null"),
+            Component ? *Component->GetName() : TEXT("none"), Info.Instances.Num(), Inside));
+        return true;
+    });
+    TArray<UInstancedStaticMeshComponent*> Components;
+    Foliage->GetComponents<UInstancedStaticMeshComponent>(Components);
+    for (const UInstancedStaticMeshComponent* Component : Components)
+    {
+        int32 Inside = 0;
+        for (int32 Index = 0; Index < Component->GetInstanceCount(); ++Index)
+        {
+            FTransform Transform;
+            if (Component->GetInstanceTransform(Index, Transform, true) && Box.IsInsideOrOn(Transform.GetLocation())) ++Inside;
+        }
+        if (Inside == 0) continue;
+        Lines.Add(FString::Printf(TEXT("component %s mesh=%s inside=%d owned_by_record=%s"), *Component->GetName(),
+            Component->GetStaticMesh() ? *Component->GetStaticMesh()->GetName() : TEXT("null"), Inside,
+            Owned.Contains(Component) ? TEXT("yes") : TEXT("NO")));
+    }
+#endif
+    return Lines;
+}
 
 int32 UCarnivalRouteEditorLibrary::RepairDuplicateFerrisSeatBlueprint(UBlueprint* Blueprint)
 {

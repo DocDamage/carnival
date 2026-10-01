@@ -33,4 +33,15 @@ public:
 
     UFUNCTION(BlueprintCallable, Category="Carnival|Editor", meta=(DevelopmentOnly))
     static bool AddLandscapeVisibilityMask(UMaterial* CopiedMaterial);
+
+    /** Remove the foliage instances of one InstancedFoliageActor whose world location lies in a small box (at most
+     *  20 x 20 m) and whose foliage-type mesh name contains MeshNameContains, through the foliage system's own
+     *  bookkeeping. Returns the number removed, or -1 if the arguments are refused. */
+    UFUNCTION(BlueprintCallable, Category="Carnival|Editor", meta=(DevelopmentOnly))
+    static int32 RemoveFoliageInBox(AActor* FoliageActor, FVector WorldMinimum, FVector WorldMaximum, const FString& MeshNameContains);
+
+    /** Read-only: for one InstancedFoliageActor, each foliage record (type, source, owned component, instances in the
+     *  box) and each instanced mesh component with instances in the box, marked when no foliage record owns it. */
+    UFUNCTION(BlueprintCallable, Category="Carnival|Editor", meta=(DevelopmentOnly))
+    static TArray<FString> DescribeFoliageInBox(AActor* FoliageActor, FVector WorldMinimum, FVector WorldMaximum);
 };

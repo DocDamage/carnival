@@ -75,7 +75,7 @@ Known remaining defects:
 
 - The Prison main-tower Gothic paintings hang about 6 m up their panels, and their canvases are not visible from reachable ground. Attempts to lower and turn them were reverted.
 - Tower paintings D-G sit inside tower floors.
-- One spruce foliage instance (#3868 in the Day, Night and NightSnow lighting levels) grows up through Lab A's main room. The available foliage Python API cannot remove a single instance safely.
+- ~~One spruce foliage instance grows up through Lab A's main room.~~ Removed 2026-10-01 from all three lighting levels via `RemoveFoliageInBox` (see `remove_lab_a_spruce.py`).
 - Other scripts use the same positional `Rotator(0, yaw, 0)` pattern (stunt-track pieces, boats, foyer note) and may have pitched their objects.
 
 ## Route network repairs and verification (2026-10-01)
