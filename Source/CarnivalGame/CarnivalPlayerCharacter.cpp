@@ -780,6 +780,14 @@ AActor* ACarnivalPlayerCharacter::FindNearbyDoor() const
 	return Doors ? Doors->FindDoorNear(GetActorLocation()) : nullptr;
 }
 
+AActor* ACarnivalPlayerCharacter::FindNearbySealedDoor() const
+{
+	if (LocomotionState != ECarnivalLocomotionState::Walking && LocomotionState != ECarnivalLocomotionState::Jogging
+		&& LocomotionState != ECarnivalLocomotionState::Sprinting && LocomotionState != ECarnivalLocomotionState::Crouching) return nullptr;
+	const UCarnivalDoorSubsystem* Doors = GetWorld() ? GetWorld()->GetSubsystem<UCarnivalDoorSubsystem>() : nullptr;
+	return Doors ? Doors->FindDoorNear(GetActorLocation(), 220.0f, true) : nullptr;
+}
+
 bool ACarnivalPlayerCharacter::IsInWaterVolume() const
 {
 	return GetCharacterMovement() && GetCharacterMovement()->IsInWater();

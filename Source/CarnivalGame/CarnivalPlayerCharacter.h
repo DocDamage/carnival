@@ -146,6 +146,9 @@ public:
 	/** Nearest vendor door (BP_Door*) the context interact would open or close, or null. */
 	UFUNCTION(BlueprintPure, Category = "Interaction")
 	AActor* FindNearbyDoor() const;
+	/** Nearest sealed vendor door within reach (shown as "Locked"), or null. */
+	UFUNCTION(BlueprintPure, Category = "Interaction")
+	AActor* FindNearbySealedDoor() const;
 
 	UFUNCTION(BlueprintPure, Category = "Recovery")
 	bool CanRecoverToSafePosition() const;

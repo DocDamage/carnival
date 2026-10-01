@@ -25,8 +25,9 @@ public:
 	/** Actor tag that keeps a vendor door permanently shut. */
 	static const FName SealedDoorTag;
 
-	/** Nearest usable vendor door whose leaves are within Reach of Location, or null. */
-	AActor* FindDoorNear(const FVector& Location, float Reach = 220.0f) const;
+	/** Nearest usable vendor door whose leaves are within Reach of Location, or null. With bSealed, the nearest
+	 *  sealed door instead (for a "Locked" prompt). */
+	AActor* FindDoorNear(const FVector& Location, float Reach = 220.0f, bool bSealed = false) const;
 
 	/** Opens a closed door (swinging away from From) or closes an open one. False if not a usable door. */
 	bool ToggleDoor(AActor* Door, const FVector& From, bool bSnap = false);

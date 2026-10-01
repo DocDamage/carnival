@@ -91,15 +91,15 @@ bool UCarnivalDoorSubsystem::IsDoorOpen(AActor* Door)
 	return State && State->bOpen;
 }
 
-AActor* UCarnivalDoorSubsystem::FindDoorNear(const FVector& Location, float Reach) const
+AActor* UCarnivalDoorSubsystem::FindDoorNear(const FVector& Location, float Reach, bool bSealed) const
 {
 	AActor* Best = nullptr;
 	float BestDistance = Reach;
 	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
 	{
 		AActor* Actor = *It;
-		if (!IsVendorDoor(Actor) || IsSealed(Actor) || FVector::DistSquared(Actor->GetActorLocation(), Location) > FMath::Square(Reach + 400.0f)) continue;
-		if (const FDoor* Known = Doors.Find(Actor); Known && Known->Leaves.IsEmpty()) continue;
+		if (!IsVendorDoor(Actor) || IsSealed(Actor) != bSealed || FVector::DistSquared(Actor->GetActorLocation(), Location) > FMath::Square(Reach + 400.0f)) continue;
+		if (const FDoor* Known = Doors.Find(Actor); !bSealed && Known && Known->Leaves.IsEmpty()) continue;
 		TArray<UStaticMeshComponent*> Meshes;
 		Actor->GetComponents<UStaticMeshComponent>(Meshes);
 		for (const UStaticMeshComponent* Mesh : Meshes)

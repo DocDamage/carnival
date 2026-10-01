@@ -201,13 +201,15 @@ void ACarnivalHUD::DrawStoryInteractionPrompt(ACarnivalPlayerCharacter* Char, AC
 	if (!Char || !PC) return;
 	ACarnivalMissionInteractionActor* Target = Char->FindNearbyMissionInteraction();
 	AActor* Door = Target ? nullptr : Char->FindNearbyDoor();
-	if (!Target && !Door) return;
+	// A sealed door says so instead of silently ignoring the button.
+	const bool bLocked = !Target && !Door && Char->FindNearbySealedDoor();
+	if (!Target && !Door && !bLocked) return;
 	const FString Button = PC->GetActionKeyLabel(PC->ContextInteractAction);
 	FString Prompt;
 	if (Target) Prompt = Target->GetPromptText().ToString();
-	else Prompt = GetWorld()->GetSubsystem<UCarnivalDoorSubsystem>()->IsDoorOpen(Door) ? TEXT("Close door") : TEXT("Open door");
+	else if (Door) Prompt = GetWorld()->GetSubsystem<UCarnivalDoorSubsystem>()->IsDoorOpen(Door) ? TEXT("Close door") : TEXT("Open door");
 	TArray<FString> Lines;
-	Lines.Add(FString::Printf(TEXT("[%s] %s"), *Button, *Prompt));
+	Lines.Add(bLocked ? FString(TEXT("Locked")) : FString::Printf(TEXT("[%s] %s"), *Button, *Prompt));
 	const float Width = FMath::Min(520.f, Canvas->ClipX - 40.f);
 	DrawBoxWithText((Canvas->ClipX - Width) * .5f, Canvas->ClipY - 88.f, Width, 58.f,
 		TEXT("INTERACT"), Lines,

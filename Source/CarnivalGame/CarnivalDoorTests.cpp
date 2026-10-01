@@ -128,6 +128,8 @@ bool FVendorDoorInteractionTest::RunTest(const FString&)
 	TestTrue(TEXT("A sealed door is not found"), Doors->FindDoorNear(SealedBox.GetCenter() + SealedSide) == nullptr);
 	TestFalse(TEXT("A sealed door does not toggle"), Doors->ToggleDoor(Sealed, SealedBox.GetCenter() + SealedSide, true));
 	TestFalse(TEXT("A sealed door stays closed"), Doors->IsDoorOpen(Sealed));
+	TestTrue(TEXT("A sealed door is found for the Locked prompt"), Doors->FindDoorNear(SealedBox.GetCenter() + SealedSide, 220.f, true) == Sealed);
+	TestTrue(TEXT("An ordinary door is not reported as locked"), Doors->FindDoorNear(LeafBox.GetCenter() + Side, 220.f, true) == nullptr);
 	return true;
 }
 #endif
