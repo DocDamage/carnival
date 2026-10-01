@@ -68,9 +68,6 @@ void ACarnivalHUD::DrawHUD()
 	if (bShowHelpOverlay)
 	{
 		DrawTelemetry(Char, PC);
-#if WITH_EDITOR
-		DrawFastTravelGuide();
-#endif
 	}
 	if (Char && Char->BuildComponent && Char->BuildComponent->bIsBuildModeActive)
 	{
@@ -84,7 +81,7 @@ void ACarnivalHUD::DrawHUD()
 	DrawStoryInteractionPrompt(Char, PC);
 	DrawPlayerRecoveryPrompt(Char, PC);
 	DrawRideInteraction(Char, PC);
-
+	DrawSwimControls(Char, PC);
 }
 
 void ACarnivalHUD::DrawVehicleControls(ACarnivalPlayerController* PC)
@@ -374,27 +371,16 @@ void ACarnivalHUD::DrawTelemetry(ACarnivalPlayerCharacter* Char, ACarnivalPlayer
 		FLinearColor(0.9f, 0.9f, 0.9f, 1.0f));
 }
 
-void ACarnivalHUD::DrawFastTravelGuide()
+void ACarnivalHUD::DrawSwimControls(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC)
 {
+	if (!Canvas || !Char || !PC || !Char->IsInWaterVolume() || Char->IsUsingRide()) return;
 	TArray<FString> Lines;
-	Lines.Add(TEXT("[F1] Creepwood Carnival"));
-	Lines.Add(TEXT("[F2] Haunted Mansion"));
-	Lines.Add(TEXT("[F3] Town & Village"));
-	Lines.Add(TEXT("[F4] Lighthouse & Ocean"));
-	Lines.Add(TEXT("[F5] Medieval Castle"));
-	Lines.Add(TEXT("[F6] Gladiator Arena"));
-	Lines.Add(TEXT("[F7] Mars Outpost"));
-	Lines.Add(TEXT("Press any F-key to travel instantly"));
-
-	float Width = 320.0f;
-	float X = Canvas->ClipX - Width - 20.0f;
-
-	DrawBoxWithText(X, 20.0f, Width, 190.0f,
-		TEXT("FAST TRAVEL DESTINATIONS"),
-		Lines,
-		FLinearColor(0.02f, 0.04f, 0.08f, 0.75f),
-		FLinearColor(1.0f, 0.8f, 0.2f, 1.0f),
-		FLinearColor(0.9f, 0.9f, 0.9f, 1.0f));
+	Lines.Add(FString::Printf(TEXT("[%s] Swim up  |  [%s] Dive"),
+		*PC->GetActionKeyLabel(PC->JumpVaultAction), *PC->GetActionKeyLabel(PC->CrouchAction)));
+	// Bottom left, clear of the centred interact prompt and the bottom-right recovery prompt.
+	const float Width = FMath::Min(360.f, Canvas->ClipX - 40.f);
+	DrawBoxWithText(20.f, Canvas->ClipY - 84.f, Width, 56.f, TEXT("SWIMMING"), Lines,
+		FLinearColor(.02f,.05f,.07f,.88f), FLinearColor(.45f,.85f,1.f), FLinearColor::White);
 }
 
 void ACarnivalHUD::DrawBuildModeHUD(ACarnivalPlayerCharacter* Char)

@@ -36,7 +36,7 @@ protected:
 	void DrawVehicleControls(ACarnivalPlayerController* PC);
 	void DrawTelemetry(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC);
 	void DrawBuildModeHUD(ACarnivalPlayerCharacter* Char);
-	void DrawFastTravelGuide();
+	void DrawSwimControls(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC);
 	void DrawSettingsMenu(ACarnivalPlayerController* PC);
 	void DrawActivityOverlay(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC);
 	void DrawStoryMissionOverlay(ACarnivalPlayerController* PC);
