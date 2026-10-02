@@ -246,6 +246,19 @@ void ACarnivalPlayerCharacter::UpdateSafeRecoveryState(float DeltaTime)
 	{
 		SafeLocationRefreshTime = 0.f;
 	}
+
+	// Fall net: a deep or long fall (off a deck edge over open space, through a seam) returns the player on its own
+	// instead of waiting for the recovery prompt. Water is excluded: sinking onto a seabed is a slow fall.
+	const bool bDeepFall = bFalling && !Movement->IsInWater() && bHasSafeRecoveryLocation
+		&& (LastSafeRecoveryLocation.Z - GetActorLocation().Z >= AutoRecoverFallDrop || FallingDuration >= AutoRecoverFallTime);
+	if (bDeepFall && !IsUsingRide() && !MountedMotorcycle && !MountedBoat && !MountedHovercraft && !IsParkourTraversing())
+	{
+		FVector RecoveryLocation;
+		if (!(FindSafeRecoveryLocation(RecoveryLocation) && StandAndTeleport(RecoveryLocation, LastSafeRecoveryRotation)))
+		{
+			ReturnToNearestRoute();
+		}
+	}
 }
 
 bool ACarnivalPlayerCharacter::CanRecoverToSafePosition() const
