@@ -1023,6 +1023,7 @@ void ACarnivalPlayerCharacter::OnDismountMotorcycle(ACarnivalMotorcycle* Bike, b
 void ACarnivalPlayerCharacter::OnMountBoat(ACarnivalBoat* Boat)
 {
 	if (!Boat) return;
+	SetWaterVehicleCameraIgnored(true);
 	MountedBoat = Boat;
 	SetLocomotionState(ECarnivalLocomotionState::DrivingBoat);
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -1033,6 +1034,7 @@ void ACarnivalPlayerCharacter::OnMountBoat(ACarnivalBoat* Boat)
 
 void ACarnivalPlayerCharacter::OnDismountBoat()
 {
+	SetWaterVehicleCameraIgnored(false);
 	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	if (GetCharacterMovement()->IsInWater())
@@ -1051,6 +1053,7 @@ void ACarnivalPlayerCharacter::OnDismountBoat()
 void ACarnivalPlayerCharacter::OnMountHovercraft(ACarnivalHovercraft* Craft)
 {
 	if (!Craft) return;
+	SetWaterVehicleCameraIgnored(true);
 	MountedHovercraft = Craft;
 	SetLocomotionState(ECarnivalLocomotionState::PilotingHovercraft);
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -1061,11 +1064,26 @@ void ACarnivalPlayerCharacter::OnMountHovercraft(ACarnivalHovercraft* Craft)
 
 void ACarnivalPlayerCharacter::OnDismountHovercraft()
 {
+	SetWaterVehicleCameraIgnored(false);
 	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
 	SetLocomotionState(ECarnivalLocomotionState::Jogging);
 	MountedHovercraft = nullptr;
+}
+
+void ACarnivalPlayerCharacter::SetWaterVehicleCameraIgnored(bool bIgnored)
+{
+	if (!GetMesh() || bIgnored == bWaterVehicleCameraIgnored) return;
+	// The vehicle spring arm ignores its own actor, but the attached rider is
+	// a separate actor. A camera-blocking rider mesh can collapse it to the hull.
+	if (bIgnored)
+	{
+		PreWaterVehicleCameraResponse = GetMesh()->GetCollisionResponseToChannel(ECC_Camera);
+		GetMesh()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	}
+	else GetMesh()->SetCollisionResponseToChannel(ECC_Camera, PreWaterVehicleCameraResponse);
+	bWaterVehicleCameraIgnored = bIgnored;
 }
 
 void ACarnivalPlayerCharacter::PerformMountedAttack(bool bIsShooting, bool bPunchRight)

@@ -1,4 +1,4 @@
-"""Import SK_RSG_Bike.fbx into Unreal and assign to BP_CarnivalMotorcycle.
+r"""Import SK_RSG_Bike.fbx into Unreal and assign to BP_CarnivalMotorcycle.
 
 Run headlessly:
     UnrealEditor-Cmd.exe "CarnivalGame.uproject" -unattended -nullrhi -nosplash

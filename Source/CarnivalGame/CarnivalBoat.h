@@ -122,6 +122,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Boat")
 	void Dismount();
 
+	UFUNCTION(BlueprintPure, Category = "Boat|Recovery")
+	bool CanRecoverToBoardingPoint() const;
+	UFUNCTION(BlueprintCallable, Category = "Boat|Recovery")
+	bool TryRecoverToBoardingPoint();
+
 	/* Controls */
 	UFUNCTION(BlueprintCallable, Category = "Boat|Input")
 	void InputThrottle(float Value);
@@ -142,6 +147,9 @@ protected:
 	void RestoreRider(bool bEmergency);
 	void RecoverLostPossession();
 	FTransform BoardingTransform;
+	FTransform BoardingVehicleTransform;
+	bool bHasBoardingVehicleTransform = false;
+	float BlockedControlDuration = 0.f;
 	TWeakObjectPtr<AController> BoardingController;
 
 	float ThrottleInput = 0.0f;

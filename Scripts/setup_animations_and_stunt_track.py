@@ -1,4 +1,4 @@
-"""Import motorcycle animations, create and assign AnimMontages to BP_CarnivalPlayerCharacter,
+r"""Import motorcycle animations, create and assign AnimMontages to BP_CarnivalPlayerCharacter,
 and strategically place a stunt course with ramps, jumps, and drift slaloms in LV_Carnival.
 
 Run headlessly:

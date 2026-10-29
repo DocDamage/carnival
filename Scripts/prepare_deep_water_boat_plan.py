@@ -42,7 +42,7 @@ plan['entries'].append({
     'boarding_survey_evidence':{'existing':'NorthDock_Side_Pier','floor_z_cm':635,'extension':'New 21 degree project-owned ramp to a low deck 30 cm above measured water; acceptance pending.'},
     'boarding_decks':[
         {'center_local_cm':[4700,-1050,center_z-600],'size_cm':[length,400,35],'rotation_deg':[pitch,-90,0],'material_from_actor':'NorthDock_Side_Pier'},
-        {'center_local_cm':[5150,-2200,-827.5],'size_cm':[1300,400,35],'rotation_deg':[0,0,0],'material_from_actor':'NorthDock_Side_Pier'},
+        {'center_local_cm':[4950,-2500,-827.5],'size_cm':[1700,1000,35],'rotation_deg':[0,0,0],'material_from_actor':'NorthDock_Side_Pier'},
     ],
     'approach_world_cm':[[-50300,-54500,635],[-50300,-54800,635],[-50300,-55050,ramp_floor(-55050)],[-50300,-55800,ramp_floor(-55800)],[-50300,-56600,ramp_floor(-56600)],[-50300,-57200,-210],[-49800,-57200,-210],[-49260,-57200,-210]],
     'drive_lane_survey_evidence':{'file':path.name,'grid_spacing_cm':100,'sample_count':len(checked),'minimum_terrain_depth_cm':min(checked)},

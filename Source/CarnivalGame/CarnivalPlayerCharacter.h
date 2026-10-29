@@ -334,6 +334,9 @@ protected:
 	bool bSubmerged = false;
 	bool bSeabedWalking = false;
 	bool bCameraUnderwater = false;
+	bool bWaterVehicleCameraIgnored = false;
+	ECollisionResponse PreWaterVehicleCameraResponse = ECR_Block;
+	void SetWaterVehicleCameraIgnored(bool bIgnored);
 	float LandWalkSpeed = 0.0f;
 	float ClimbOutCooldown = 0.0f;
 	bool bClimbingOut = false;

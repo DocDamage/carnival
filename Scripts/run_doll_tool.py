@@ -17,6 +17,7 @@ test_modes = {
     "test": ("Carnival.HauntedDoll", "Automation", "Encounter_Test.log"),
     "ride-test": ("Carnival.Rides", "RideAutomation", "Ride_Test.log"),
     "motorcycle-test": ("Carnival.Motorcycle", "MotorcycleAutomation", "Motorcycle_Test.log"),
+    "vehicle-test": ("Carnival.Vehicles", "VehicleAutomation", "Vehicle_Test.log"),
     "all-test": ("Carnival", "FullAutomation", "Full_Test.log"),
     "all-test-audio": ("Carnival", "FullAutomationAudio", "Full_Test_Audio.log"),
 }
@@ -37,6 +38,9 @@ elif mode in test_modes:
             "/Engine/Maps/Entry", "-unattended", "-nullrhi", "-nosplash", "-nop4", "-NoSound",
             "-ExecCmds=Automation RunTests " + test_filter, "-TestExit=Automation Test Queue Empty",
             "-ReportExportPath=" + str(logs / report_folder),
+            # The editor Home panel's connectivity probe is unrelated to
+            # offline native tests and otherwise adds intermittent HTTP warnings.
+            "-ini:Engine:[ConsoleVariables]:HomeScreen.EnableHomeScreen=0",
             "-abslog=" + str(logs / engine_log)]
     if mode == 'all-test-audio':
         args.remove('-NoSound')
@@ -129,6 +133,9 @@ if mode == 'playtest' and result.returncode == 0:
             sys.exit(1)
 if mode in ('playtest','render-pie','editor') and script:
     acceptance_reports = {
+        'playtest_water_vehicle_recovery': base/'Saved/WorldExpansion/WaterVehicleAcceptance'/child_env.get('CARNIVAL_RECOVERY_REPORT','WaterVehicleRecovery_20261029_v1')/'index.json',
+        'playtest_hovercraft_shore_route': base/'Saved/WorldExpansion/WaterVehicleAcceptance'/(child_env.get('CARNIVAL_HOVER_ROUTE_REPORT','HovercraftShoreRoute_20261029_v5')+'.json'),
+        'playtest_east_dock_basin_returns': base/'Saved/WorldExpansion/EastDockBasinReturnsPIE_20261029.json',
         'review_wayfinding_views': base/'Saved/WorldExpansion'/('WayfindingViews_'+child_env.get('CARNIVAL_WAYFINDING_VIEW',child_env.get('CARNIVAL_WAYFINDING_REVISION','20261029_v5')))/'index.json',
         'playtest_edge_fences': base/'Saved/WorldExpansion'/('EdgeFencesPIE'+child_env.get('CARNIVAL_AUDIT_SUFFIX','_20261001')+'.json'),
         'verify_crowd_roaming_pie': base/'Saved/CrowdAcceptance'/child_env.get('CARNIVAL_CROWD_REPORT','RoamingPIE_20260930')/'index.json',
@@ -152,8 +159,8 @@ if mode in ('playtest','render-pie','editor') and script:
         'survey_water_vehicle_placements': base/'Saved/WorldExpansion/WaterVehicleAcceptance'/(child_env.get('CARNIVAL_VEHICLE_WORLD','main')+'_PlacementSurvey.json'),
         'review_lab_b_gallery_pie': base/'Saved/WorldExpansion/LabB_Gallery_PIE/Review.json',
         'playtest_balloon_station_walks': base/'Saved/RideDevelopment'/(child_env.get('CARNIVAL_BALLOON_WALK_REPORT','Balloon_Station_Walks')+'.json'),
-        'survey_dock_water_depth': base/'Saved/WorldExpansion/WaterVehicleAcceptance'/('DockWaterBerth.json' if child_env.get('CARNIVAL_WATER_DEPTH_AREA') == 'boat_berth' else 'DockWaterDepth.json'),
-        'playtest_integrated_water_vehicle_lifecycle': base/'Saved/WorldExpansion/WaterVehicleAcceptance'/(child_env.get('CARNIVAL_VEHICLE_LABEL','Hovercraft_NorthDock_Handling')+'_Lifecycle.json'),
+        'survey_dock_water_depth': base/'Saved/WorldExpansion/WaterVehicleAcceptance'/child_env.get('CARNIVAL_WATER_DEPTH_REPORT',{'boat_berth':'DockWaterBerth.json','north_routes':'NorthDockRouteDepth_20261029_v3.json'}.get(child_env.get('CARNIVAL_WATER_DEPTH_AREA'),'DockWaterDepth.json')),
+        'playtest_integrated_water_vehicle_lifecycle': base/'Saved/WorldExpansion/WaterVehicleAcceptance'/child_env.get('CARNIVAL_WATER_VEHICLE_REPORT',child_env.get('CARNIVAL_VEHICLE_LABEL','Hovercraft_NorthDock_Handling')+('_Course_20261029' if child_env.get('CARNIVAL_BOAT_ACTIVITY_PROBE')=='1' else '_Maneuvers_20261029' if child_env.get('CARNIVAL_BOAT_MANEUVER_PROBE')=='1' else '_Boundary_20261029' if child_env.get('CARNIVAL_BOAT_BOUNDARY_PROBE')=='1' else '_ExtendedRoute_20261029' if child_env.get('CARNIVAL_BOAT_EXTENDED_ROUTE')=='1' else '_Lifecycle')+'.json'),
         'review_child_roster_pie': base/'Saved/CharacterAcceptance/ChildPreview'/(('FaceCloseups'+child_env.get('CARNIVAL_CHILD_PREVIEW_VARIANT','')+'/index.json') if child_env.get('CARNIVAL_CHILD_FACE_PREVIEW')=='1' else 'BlackBoyConsistentBind/index.json' if child_env.get('CARNIVAL_CHILD_CONSISTENT_BIND')=='1' else 'BlackBoyReferenceAlignment/index.json' if child_env.get('CARNIVAL_CHILD_REFERENCE_COMPARISON')=='1' else 'index.json'),
     }
     report_path = acceptance_reports.get(script.stem)

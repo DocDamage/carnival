@@ -2,6 +2,98 @@
 
 Updated 2026-10-29. The supplied map is used as a route and mood reference. Its compass rose, decorative scale, illustrated island boundary, and building sizes were not used as surveyed world coordinates.
 
+## Mounted recovery and course controls — 2026-10-29
+
+Boat and hovercraft F/Triangle recovery returns the mounted craft to a clear
+boarding pose after sustained powered blockage; unsupported hovercraft falls
+also return automatically. Recovery clears motion/controls and cancels the
+challenge. Ordinary unloading remains available afterward. The hovercraft
+brake stops both forward and strafe motion without triggering stuck recovery.
+
+The mounted course HUD and context/cancel handlers now use the seated rider.
+The vehicle input asset now includes E/D-pad Right and Backspace/Circle, which
+were missing after switching possession. A rider mesh camera overlap is fixed
+while preserving its original response on exit. Both builds and 45 native tests
+pass; native evidence is in `WaterVehicleAcceptance/WaterRecoveryNativeFinal_20261029/`.
+Eight isolated-dock gameplay captures confirm readable prompts and the corrected
+camera down to 640x480 (`WaterVehicleRecovery_DockUI_20261029_v3/`). Full-world
+headless recovery/braking/unloading also passes (`WaterVehicleRecovery_Connected_20261029_v2/`).
+These runs use initial player placement, a hovercraft fall fixture and control APIs.
+Full-world
+rendered startup exhausted Windows commit; saved lighting, broader camera
+clearance, vehicle model/seated pose and physical input remain open.
+
+## Hovercraft shore course — 2026-10-29
+
+The hovercraft now has an 18-checkpoint course around the North Dock quays,
+down the shore ramp, onto the river and back. Three obstructing side-pier
+lanterns were moved onto supported verges. The low landing is 17 x 10 m with a
+southern turning area; its z -210 floor and x -49200 boat-facing edge stay fixed.
+Native full-hull support sweeps address convex ramp joins and small steps.
+Both native builds and all 43 native tests pass.
+
+Normal-speed PIE completes the authored course with 1,800 points in 161.90 game
+seconds, then unloads, walks back, resets, replays and cancels it. The run uses
+context APIs and ordinary vehicle/movement controls after an initial on-foot
+placement. No intermediate teleport or time acceleration. Crowd, physical
+controller, rendering, performance and untested boundaries remain open.
+Evidence: `Saved/WorldExpansion/WaterVehicleAcceptance/`
+`HovercraftShoreRoute_20261029_v5*`, `HovercraftShoreAccess_20261029/` and
+`HoverTerrainNativeFinal_20261029/`. See the handoff for verified D: backups.
+
+The boat was re-surveyed after the landing expansion. Current manifest:
+`NorthDockBoatRoute_20261029_v2/index.json`, based on
+`NorthDockRouteDepth_20261029_v3.json` (198 open samples at least 217.97 cm
+deep, 12 solid landing samples). Its course/scoring/reset/replay/cancel and
+southern-boundary check pass. A separate full-heading maneuver/parking run
+returns within 24.54 cm of the berth and unloads safely. Final reports:
+`Boat_NorthDock_Inflatable_Course_20261029_v2*` and
+`Boat_NorthDock_Inflatable_Maneuvers_20261029_v2*`. Both engines exit 0.
+Boat bounds/20 m marker are retained; checkpoint instructions are clearer.
+Root map, connectors and the repaired East Dock are unchanged in this pass.
+
+## North Dock boat route and southern boundary — 2026-10-29
+
+The boat activity now has a 20 m outbound marker and 24 x 26 m surveyed bounds
+(x -49300..-46900, y -59500..-56900), replacing its 8 x 22 m berth bounds.
+The enclosing 2 m survey grid contains 204 open-water samples with at least
+217.97 cm depth and six solid boarding-deck samples. The deck remains an
+obstacle; existing native hull sweeps and keel checks reject it. The survey
+now excludes saved vehicle hulls from terrain traces.
+
+Normal-speed PIE passes the full walk/board/20 m drive/return/unload/walk
+lifecycle, including continued forward input against the southern limit.
+The boat stops with its hull inside, rejects a further 50 cm move, and reverses
+back to the berth with driver possession intact. This accepts that straight
+journey and southern-boundary recovery. Turning, other dynamic boundaries,
+hovercraft shore travel, activity scoring, rendering and physical controls
+remain open. Crowd spawning is excluded from this geometry check.
+
+Only the North Dock level changed; verified backups are at
+`D:\CarnivalBackups\north_dock_boat_route_20261029`. Evidence is under
+`Saved/WorldExpansion/WaterVehicleAcceptance/`:
+`NorthDockRouteDepth_20261029_v2*`, `NorthDockBoatRoute_20261029/` and
+`Boat_NorthDock_Inflatable_Boundary_20261029*`.
+
+## East Dock basin return exits — 2026-10-29
+
+A fresh area audit found two eastern basin pockets accessible by dropping off
+the quay/spine, with no walking return through the existing western slipways.
+Two additional wooden slipways now connect the basin to the Main Quay at
+x 72300 and 73700, y 18850–19850: an 85 cm rise over 10 m, widths 4/5 m.
+The fresh 1 m grid audit finds all 17,061 reachable cells returnable, no traps,
+and all 15 anchor/dispatch checks passing. Four normal-speed gameplay-character
+walking legs pass in PIE, each pocket to the quay and back. These runs use
+scripted movement and initial placement per pocket, with the crowd excluded.
+Rendered presentation, physical controls and vehicle traversal remain open.
+
+Only the East Dock level changed; root map and connectors are unchanged.
+Verified before/after backups are at
+`D:\CarnivalBackups\east_dock_basin_exits_20261029_v2`.
+Evidence: `Saved/WorldExpansion/EastDockBasinExits_20261029_v2/`,
+`Saved/WorldExpansion/Reachability/docks_east_basin_exits_20261029/` and
+`Saved/WorldExpansion/EastDockBasinReturnsPIE_20261029*`.
+
 ## Latest edge and route verification — 2026-10-29
 
 Surface wayfinding now covers ten key points with double-sided boards: Carnival's

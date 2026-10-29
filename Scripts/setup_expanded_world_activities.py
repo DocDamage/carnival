@@ -1,4 +1,4 @@
-"""Place drivable boats, hovercrafts, and 12+ new themed interactive activities across all 7 maps.
+r"""Place drivable boats, hovercrafts, and 12+ new themed interactive activities across all 7 maps.
 
 Run headlessly:
     UnrealEditor-Cmd.exe "CarnivalGame.uproject" -unattended -nullrhi -nosplash

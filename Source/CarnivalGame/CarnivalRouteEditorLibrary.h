@@ -15,6 +15,18 @@ class CARNIVALGAME_API UCarnivalRouteEditorLibrary : public UBlueprintFunctionLi
 {
     GENERATED_BODY()
 public:
+    /** Isolated unattended review only: release deleted authoring actors retained by undo, then fully collect. */
+    UFUNCTION(BlueprintCallable, Category="Carnival|Editor", meta=(DevelopmentOnly))
+    static int64 PurgeAuthoringUndoForReview();
+
+    /** Resize the actual PIE game viewport, without changing project/user settings. */
+    UFUNCTION(BlueprintCallable, Category="Carnival|Editor", meta=(DevelopmentOnly, WorldContext="WorldContextObject"))
+    static bool SetGameViewportSize(UObject* WorldContextObject, FIntPoint Size);
+
+    /** Read the actual game render target (scene + Canvas HUD), never the editor viewport. Saved/ PNGs only. */
+    UFUNCTION(BlueprintCallable, Category="Carnival|Editor", meta=(DevelopmentOnly, WorldContext="WorldContextObject"))
+    static FIntPoint CaptureGameViewportPNG(UObject* WorldContextObject, const FString& OutputFile);
+
     /** Read-only provenance for a constructed ride's seat components and SCS. */
     UFUNCTION(BlueprintCallable, Category="Carnival|Editor", meta=(DevelopmentOnly))
     static TArray<FString> DescribeRideSeatConstruction(AActor* Ride);
