@@ -1,4 +1,4 @@
-"""Populate building categories on BP_CarnivalPlayerCharacter and setup build input actions.
+r"""Populate building categories on BP_CarnivalPlayerCharacter and setup build input actions.
 
 Run headlessly:
     UnrealEditor-Cmd.exe "CarnivalGame.uproject" -unattended -nullrhi -nosplash

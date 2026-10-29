@@ -1,4 +1,4 @@
-"""Create Enhanced Input Actions and Mapping Contexts for Carnival Character & Motorcycle.
+r"""Create Enhanced Input Actions and Mapping Contexts for Carnival Character & Motorcycle.
 Set up IMC_CarnivalPlayer & IMC_CarnivalMotorcycle and assign them to BP_CarnivalPlayerController. (The F1-F7 map-travel actions were removed 2026-10-01; travel is seamless in LV_Carnival.)
 
 Run headlessly:

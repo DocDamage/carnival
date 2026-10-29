@@ -27,6 +27,15 @@ namespace
 constexpr const TCHAR* CarnivalInputSettingsSection = TEXT("Carnival.InputSettings");
 constexpr int32 CarnivalInputSettingsRows = 7;
 
+ACarnivalPlayerCharacter* MountedActivityRider(APawn* Pawn)
+{
+	if (const auto* Bike = Cast<ACarnivalMotorcycle>(Pawn)) return Bike->CurrentRider;
+	if (const auto* Boat = Cast<ACarnivalBoat>(Pawn)) return Boat->CurrentRider;
+	if (const auto* Hover = Cast<ACarnivalHovercraft>(Pawn)) return Hover->CurrentRider;
+	if (const auto* Car = Cast<ACarnivalBumperCar>(Pawn)) return Car->CurrentRider;
+	return nullptr;
+}
+
 FVector2D ApplyRadialDeadZone(FVector2D Value, float DeadZone)
 {
 	Value = Value.GetClampedToMaxSize(1.f);
@@ -649,11 +658,22 @@ void ACarnivalPlayerController::OnLookStick(const FInputActionValue& Value)
 void ACarnivalPlayerController::OnContextInteract()
 {
 	if (auto* Char = Cast<ACarnivalPlayerCharacter>(GetPawn())) Char->TryContextInteract();
+	else if (auto* Rider = MountedActivityRider(GetPawn()))
+	{
+		if (Rider->ActiveActivity && (Rider->ActiveActivity->ActivityState == ECarnivalActivityState::Completed
+			|| Rider->ActiveActivity->ActivityState == ECarnivalActivityState::Failed))
+			Rider->ActiveActivity->ResetActivity();
+	}
 }
 
 void ACarnivalPlayerController::OnCancel()
 {
     if (auto* Car = Cast<ACarnivalBumperCar>(GetPawn())) { Car->RequestExit(); return; }
+	if (auto* Rider = MountedActivityRider(GetPawn()))
+	{
+		if (Rider->ActiveActivity) Rider->ActiveActivity->AbortActivity();
+		return;
+	}
 	if (auto* Char = Cast<ACarnivalPlayerCharacter>(GetPawn()))
 	{
 		Char->CancelParkourTraversal();
@@ -868,6 +888,7 @@ void ACarnivalPlayerController::OnSteer(const FInputActionValue& Value)
 
 void ACarnivalPlayerController::OnBrake(const FInputActionValue& Value)
 {
+	if (auto* Hover = Cast<ACarnivalHovercraft>(GetPawn())) Hover->InputBrake(Value.Get<float>());
     if (auto* Car = Cast<ACarnivalBumperCar>(GetPawn())) Car->InputBrake(Value.Get<float>());
 	if (auto* Boat = Cast<ACarnivalBoat>(GetPawn())) Boat->InputBrake(Value.Get<float>());
 	if (ACarnivalMotorcycle* Bike = Cast<ACarnivalMotorcycle>(GetPawn()))

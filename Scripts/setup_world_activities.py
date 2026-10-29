@@ -1,4 +1,4 @@
-"""Place themed interactive activities, target actors, and checkpoint challenges across all 7 maps.
+r"""Place themed interactive activities, target actors, and checkpoint challenges across all 7 maps.
 
 Run headlessly:
     UnrealEditor-Cmd.exe "CarnivalGame.uproject" -unattended -nullrhi -nosplash

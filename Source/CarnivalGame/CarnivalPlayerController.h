@@ -182,6 +182,11 @@ public:
 	};
 	TArray<FControlBinding> ControlBindings;
 
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	void OnContextInteract();
+	UFUNCTION(BlueprintCallable, Category = "Input")
+	void OnCancel();
+
 protected:
 	void HandleSessionMenuInput(const FInputKeyEventArgs& Params);
 	void ActivateSessionMenuChoice();
@@ -213,8 +218,6 @@ protected:
 	void OnMove(const FInputActionValue& Value);
 	void OnLook(const FInputActionValue& Value);
 	void OnLookStick(const FInputActionValue& Value);
-	void OnContextInteract();
-	void OnCancel();
 	void OnJumpVault();
 	void OnStartSprint();
 	void OnStopSprint();

@@ -88,6 +88,11 @@ for context_name in ('IMC_CarnivalPlayer', 'IMC_CarnivalMotorcycle'):
     flip_y.set_editor_property('z', False)
     map_input(context, look, 'Gamepad_Right2D', [deadzone(), flip_y])
     map_input(context, unreal.load_asset(INPUT + '/IA_SettingsMenu'), 'Gamepad_Special_Right')
+    # Courses remain operable and cancellable after possession switches to a vehicle.
+    for button in ('E', 'Gamepad_DPad_Right'):
+        map_input(context, interact, button)
+    for button in ('BackSpace', 'Gamepad_FaceButton_Right'):
+        map_input(context, cancel, button)
     if foot:
         move = unreal.load_asset(INPUT + '/IA_Move')
         for name, modifiers in [('W',[swizzle()]), ('S',[negate(),swizzle()]), ('A',[negate()]), ('D',[])]:
@@ -101,10 +106,6 @@ for context_name in ('IMC_CarnivalPlayer', 'IMC_CarnivalMotorcycle'):
         map_input(context, unreal.load_asset(INPUT + '/IA_Move'), 'Gamepad_Left2D', [deadzone()])
         for name, button in [('IA_Sprint', 'Gamepad_FaceButton_Bottom'), ('IA_JumpVault', 'Gamepad_FaceButton_Left'), ('IA_Crouch', 'Gamepad_LeftThumbstick')]:
             map_input(context, unreal.load_asset(INPUT + '/' + name), button)
-        for button in ('E', 'Gamepad_DPad_Right'):
-            map_input(context, interact, button)
-        for button in ('BackSpace', 'Gamepad_FaceButton_Right'):
-            map_input(context, cancel, button)
     else:
         for name, button, mods in [('IA_Throttle','W',[]),('IA_Throttle','S',[negate()]),('IA_Steer','D',[]),('IA_Steer','A',[negate()]),('IA_Brake','SpaceBar',[])]:
             map_input(context, unreal.load_asset(INPUT + '/' + name), button, mods)

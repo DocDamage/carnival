@@ -1,5 +1,17 @@
 # Playable demo checklist
 
+Current continuation: [October 29 handoff and remaining work](HANDOFF_20261001.md).
+The Editor and Development game builds pass, and 45/45 native tests pass without
+test warnings. The East Dock basin now has tested walking returns, the boat has
+a longer surveyed lane and maneuver evidence, and the hovercraft completes an
+18-checkpoint dock/river course with scoring, unloading, reset, replay and
+cancellation. Mounted boat/hovercraft recovery and hovercraft braking now have
+native, isolated-dock and connected-world headless PIE coverage. Missing mounted
+course input bindings and the rider-mesh camera obstruction are repaired.
+Full-world rendered startup currently exhausts Windows commit;
+isolated UI captures do not accept world presentation. These are scoped scripted checks; hardware,
+crowd, package, performance and the remaining scope below are still open.
+
 Current progress is recorded in [the September 30 completion record](COMPLETION_PASS_20260930.md).
 The full supplied scope is preserved in [the September 30 scope](DEMO_SCOPE_20260930.md).
 Three-slot story/player/door/building saves and a controller-accessible pause menu

@@ -118,6 +118,21 @@ bool FPlayerSafeRecoveryTest::RunTest(const FString&)
 	TestTrue(TEXT("Return to path leaves walking movement and collision"), Player->GetCharacterMovement()->MovementMode == MOVE_Walking
 		&& Player->GetCapsuleComponent()->GetCollisionEnabled() == ECollisionEnabled::QueryAndPhysics);
 	TestFalse(TEXT("Return to path clears pending recovery"), Player->CanRecoverToSafePosition());
+
+	// Fall net: a short drop is left alone; a deep fall below the last safe point recovers on its own.
+	for (int32 Frame = 0; Frame < 30; ++Frame) Player->Tick(1.f / 60.f);   // refresh the safe point at the anchor
+	const FVector SafeSpot = Player->GetActorLocation();
+	Player->SetActorLocation(SafeSpot - FVector(0.f, 0.f, 1600.f), false, nullptr, ETeleportType::TeleportPhysics);
+	Player->GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+	Player->Tick(1.f / 60.f);
+	TestTrue(TEXT("A 16 m drop does not trigger the fall net"), Player->GetCharacterMovement()->MovementMode == MOVE_Falling
+		&& Player->GetActorLocation().Z < SafeSpot.Z - 1000.f);
+	Player->SetActorLocation(SafeSpot - FVector(0.f, 0.f, 4500.f), false, nullptr, ETeleportType::TeleportPhysics);
+	Player->Tick(1.f / 60.f);
+	AddInfo(FString::Printf(TEXT("Fall net: safe=%s after=%s"), *SafeSpot.ToString(), *Player->GetActorLocation().ToString()));
+	TestTrue(TEXT("A 45 m fall returns the player to the last safe point"), FVector::Dist(Player->GetActorLocation(), SafeSpot) < 220.f);
+	TestTrue(TEXT("The fall net leaves walking movement and collision"), Player->GetCharacterMovement()->MovementMode == MOVE_Walking
+		&& Player->GetCapsuleComponent()->GetCollisionEnabled() == ECollisionEnabled::QueryAndPhysics);
 	return true;
 }
 #endif

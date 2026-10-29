@@ -4,6 +4,19 @@
 #include "GameFramework/Actor.h"
 
 #if WITH_EDITOR
+#include "Editor.h"
+#include "Editor/Transactor.h"
+#include "HAL/PlatformMemory.h"
+#include "Misc/App.h"
+#include "RenderingThread.h"
+#include "UObject/GarbageCollection.h"
+#include "Engine/Engine.h"
+#include "Engine/World.h"
+#include "Engine/GameViewportClient.h"
+#include "Slate/SceneViewport.h"
+#include "ImageUtils.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 #include "Landscape.h"
 #include "LandscapeInfo.h"
 #include "LandscapeEdit.h"
@@ -24,6 +37,61 @@
 #include "InstancedFoliage.h"
 #include "FoliageType.h"
 #endif
+
+int64 UCarnivalRouteEditorLibrary::PurgeAuthoringUndoForReview()
+{
+#if WITH_EDITOR
+    if (!FApp::IsUnattended() || !GEditor || GEditor->PlayWorld) return -1;
+    const uint64 Before = FPlatformMemory::GetStats().UsedVirtual;
+    if (GEditor->Trans) GEditor->Trans->Reset(NSLOCTEXT("CarnivalReview", "ClearUndo", "Isolated geometry review"));
+    CollectGarbage(RF_NoFlags, true);
+    FlushRenderingCommands();
+    FMemory::Trim();
+    return static_cast<int64>(Before) - static_cast<int64>(FPlatformMemory::GetStats().UsedVirtual);
+#else
+    return -1;
+#endif
+}
+
+bool UCarnivalRouteEditorLibrary::SetGameViewportSize(UObject* WorldContextObject, FIntPoint Size)
+{
+#if WITH_EDITOR
+    UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+    UGameViewportClient* Client = World && (World->WorldType == EWorldType::PIE || World->WorldType == EWorldType::Game) ? World->GetGameViewport() : nullptr;
+    if (!Client || !Client->Viewport || Size.X < 320 || Size.Y < 200 || Size.X > 3840 || Size.Y > 2160) return false;
+    Client->Viewport->SetFixedViewportSize(Size.X, Size.Y);
+    return true;
+#else
+    return false;
+#endif
+}
+
+FIntPoint UCarnivalRouteEditorLibrary::CaptureGameViewportPNG(UObject* WorldContextObject, const FString& OutputFile)
+{
+#if WITH_EDITOR
+    UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+    UGameViewportClient* Client = World && (World->WorldType == EWorldType::PIE || World->WorldType == EWorldType::Game) ? World->GetGameViewport() : nullptr;
+    FString Path = FPaths::ConvertRelativePathToFull(OutputFile);
+    FPaths::NormalizeFilename(Path);
+    const FString Saved = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir());
+    if (!Client || !Client->Viewport || !FPaths::IsUnderDirectory(Path, Saved) || FPaths::GetExtension(Path) != TEXT("png")) return FIntPoint::ZeroValue;
+    FSceneViewport* Viewport = Client->Viewport;
+    const FIntPoint Size = Viewport->GetSizeXY();
+    if (Size.X < 320 || Size.Y < 200 || Size.X > 3840 || Size.Y > 2160) return FIntPoint::ZeroValue;
+    Viewport->Draw(false);
+    TArray<FColor> Pixels;
+    FReadSurfaceDataFlags Flags(RCM_UNorm);
+    Flags.SetLinearToGamma(false);
+    if (!Viewport->ReadPixels(Pixels, Flags) || Pixels.Num() != Size.X * Size.Y) return FIntPoint::ZeroValue;
+    for (FColor& Pixel : Pixels) Pixel.A = 255;
+    TArray64<uint8> PNG;
+    FImageUtils::PNGCompressImageArray(Size.X, Size.Y, TArrayView64<const FColor>(Pixels.GetData(), Pixels.Num()), PNG);
+    IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path), true);
+    return FFileHelper::SaveArrayToFile(PNG, *Path) ? Size : FIntPoint::ZeroValue;
+#else
+    return FIntPoint::ZeroValue;
+#endif
+}
 
 int32 UCarnivalRouteEditorLibrary::RemoveFoliageInBox(AActor* FoliageActor, FVector WorldMinimum, FVector WorldMaximum, const FString& MeshNameContains)
 {

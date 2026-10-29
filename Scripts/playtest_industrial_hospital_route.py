@@ -2,7 +2,8 @@
 
 API-driven controls are not a physical-controller or visual acceptance test.
 Only the initial position of each independent travel mode is teleported. Both
-directions within a mode must be traversed continuously at normal game speed.
+directions within a mode must be traversed continuously; simulation speed is
+recorded in the report.
 The crowd spawner is excluded in the unsaved test world, never in saved maps.
 """
 import json
@@ -33,6 +34,7 @@ time_dilation = float(os.environ.get("CARNIVAL_ROUTE_TIME_DILATION", "1.0"))
 report = {"success": False, "map": MAIN_MAP, "tests": [], "errors": [],
           "route_start_index": start_index, 'route_end_index':end_index,
           "time_dilation": time_dilation, "input_method": "pawn movement and motorcycle input APIs",
+          "motorcycle_driver": {"lookahead_cm":250,"waypoint_cross_track_cm":150,"anticipate_bends":True},
           "excluded_unrelated_crowd_spawners": [],
           "route_length_m": sum(math.dist(a.to_tuple(), b.to_tuple()) for a,b in zip(forward,forward[1:]))/100}
 state = {"phase": "setup", "busy": False, "deadline": time.monotonic() + 180}
@@ -42,6 +44,8 @@ if not world:
     raise RuntimeError("Could not load the connected Carnival map")
 eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
 for actor in list(eas.get_all_level_actors()):
+    if actor.get_name()=='StaticMeshActor_151' and '/L_HauntedMansionConnected.' in actor.get_path_name():
+        report['mansion_cardbox_reload']={'label':actor.get_actor_label(),'position':actor.get_actor_location().to_tuple()}
     if actor.get_class().get_name() == "MetaHumanMassSpawner":
         report["excluded_unrelated_crowd_spawners"].append(actor.get_actor_label())
         eas.destroy_actor(actor)
@@ -58,13 +62,13 @@ def reached_waypoint(pos, route, index):
     if state["mode"] != "motorcycle" or index == 0:
         return False
     # A vehicle may pass beside a sample during a turn. Accept crossing its
-    # perpendicular plane only within the 9 m lane and a short local segment.
+    # perpendicular plane only within the lane's central 3 m and a short segment.
     tangent = route[index] - route[index-1]
     length = max(1, math.hypot(tangent.x, tangent.y))
     dx, dy = pos.x-route[index].x, pos.y-route[index].y
     along = (dx*tangent.x+dy*tangent.y)/length
     across = abs(dx*tangent.y-dy*tangent.x)/length
-    return 0 <= along < 500 and across < 350
+    return 0 <= along < 500 and across < 150
 
 def finish(error=None):
     if error:
@@ -101,6 +105,8 @@ def begin_leg(mode, reverse=False):
             approach = bike_location - right * 60 + unreal.Vector(0, 0, 98.195294)
             player.set_actor_location(approach, False, True)
             actor.mount(player, True)
+            if actor.get_editor_property('current_rider')!=player or unreal.GameplayStatics.get_player_pawn(state['game'],0)!=actor:
+                raise RuntimeError('Motorcycle mount did not establish rider and possession')
             actor.input_brake(0)
     now = unreal.GameplayStatics.get_time_seconds(state["game"])
     name = mode + ("_return" if reverse else "_outbound")
@@ -135,11 +141,16 @@ def tick(delta):
             if not isinstance(player, unreal.CarnivalPlayerCharacter):
                 raise RuntimeError("Unexpected player pawn: " + player.get_class().get_name())
             state.update(game=game, player=player, bike=bikes[0])
+            report['edge_fences_in_game']=len(unreal.GameplayStatics.get_all_actors_with_tag(game,'CarnivalEdgeFence'))
+            report['edge_fence_caps_in_game']=len(unreal.GameplayStatics.get_all_actors_with_tag(game,'CarnivalEdgeFenceCap'))
             report.update(player_class=player.get_class().get_name(), motorcycle_class=bikes[0].get_class().get_name())
+            unreal.SystemLibrary.execute_console_command(game,'t.IdleWhenNotForeground 0')
             unreal.GameplayStatics.set_global_time_dilation(game, time_dilation)
             begin_leg(globals().get("START_MODE", "walk"))
             return
         actor, route = state["actor"], state["route"]
+        if state['mode']=='motorcycle' and (actor.get_editor_property('current_rider')!=state['player'] or unreal.GameplayStatics.get_player_pawn(state['game'],0)!=actor):
+            raise RuntimeError('Motorcycle lost its rider or possession during traversal')
         pos = actor.get_actor_location()
         now = unreal.GameplayStatics.get_time_seconds(game)
         # Advance through nearby consecutive samples only; never skip a stretch
@@ -164,6 +175,8 @@ def tick(delta):
                 sample.update(speed=actor.current_speed,rotation=actor.get_actor_rotation().to_tuple(),
                     collision={'blocked':bool(hit[0]),'initial_overlap':bool(hit[1]),
                                'actor':hit[9].get_name() if hit[9] else None,
+                               'actor_path':hit[9].get_path_name() if hit[9] else None,
+                               'actor_label':hit[9].get_actor_label() if hit[9] else None,
                                'point':hit[5].to_tuple(),'normal':hit[7].to_tuple()})
             current["samples"].append(sample)
             (OUT / (report_prefix + "_Live.json")).write_text(json.dumps({"mode": state["phase"], "total": len(route), **sample}))
@@ -180,7 +193,7 @@ def tick(delta):
                 finish()
             return
         target_index = state["index"]
-        lookahead = 170 if state["mode"] == "walk" else 500
+        lookahead = 170 if state["mode"] == "walk" else 250
         while target_index < len(route) - 1 and xy(pos, route[target_index]) < lookahead:
             target_index += 1
         d = route[target_index] - pos
@@ -191,9 +204,12 @@ def tick(delta):
             desired = math.degrees(math.atan2(d.y, d.x))
             error = (desired - actor.get_actor_rotation().yaw + 180) % 360 - 180
             actor.input_steering(max(-1, min(1, error / 13)))
+            following = route[min(target_index+1,len(route)-1)]-route[target_index]
+            following_yaw = math.degrees(math.atan2(following.y,following.x))
+            upcoming_turn = abs((following_yaw-desired+180)%360-180) if following.length()>1 else 0
             # Slow before the endpoint and during a tight turn, just as a rider
             # would. Normal traversal throttle cannot turn inside the forecourt.
-            tight_turn = abs(error) > 35 or xy(pos, route[-1]) < 2000
+            tight_turn = abs(error) > 35 or xy(pos, route[-1]) < 2000 or (upcoming_turn > 20 and xy(pos,route[target_index]) < 900)
             actor.input_throttle(.05 if tight_turn else (.29 if abs(error) < 15 else .18))
     except Exception:
         finish(traceback.format_exc())

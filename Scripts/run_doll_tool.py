@@ -17,6 +17,7 @@ test_modes = {
     "test": ("Carnival.HauntedDoll", "Automation", "Encounter_Test.log"),
     "ride-test": ("Carnival.Rides", "RideAutomation", "Ride_Test.log"),
     "motorcycle-test": ("Carnival.Motorcycle", "MotorcycleAutomation", "Motorcycle_Test.log"),
+    "vehicle-test": ("Carnival.Vehicles", "VehicleAutomation", "Vehicle_Test.log"),
     "all-test": ("Carnival", "FullAutomation", "Full_Test.log"),
     "all-test-audio": ("Carnival", "FullAutomationAudio", "Full_Test_Audio.log"),
 }
@@ -37,6 +38,9 @@ elif mode in test_modes:
             "/Engine/Maps/Entry", "-unattended", "-nullrhi", "-nosplash", "-nop4", "-NoSound",
             "-ExecCmds=Automation RunTests " + test_filter, "-TestExit=Automation Test Queue Empty",
             "-ReportExportPath=" + str(logs / report_folder),
+            # The editor Home panel's connectivity probe is unrelated to
+            # offline native tests and otherwise adds intermittent HTTP warnings.
+            "-ini:Engine:[ConsoleVariables]:HomeScreen.EnableHomeScreen=0",
             "-abslog=" + str(logs / engine_log)]
     if mode == 'all-test-audio':
         args.remove('-NoSound')
@@ -49,6 +53,10 @@ elif mode == "editor":
     args = [str(engine / "Binaries/Win64/UnrealEditor-Cmd.exe"), str(base / "CarnivalGame.uproject"),
             "/Engine/Maps/Entry", "-unattended", "-RenderOffscreen", "-nosplash", "-nop4", "-NoSound",
             "-ExecCmds=py " + str(script), "-abslog=" + str(logs / (script.stem + "_engine.log"))]
+    editor_rhi=os.environ.get('CARNIVAL_RENDER_RHI')
+    if editor_rhi:
+        assert editor_rhi in ('dx11','dx12'),editor_rhi
+        args.append('-'+editor_rhi)
 elif mode == "playtest":
     # PIE route callbacks need the persistent Slate loop in UnrealEditor.exe.
     # UnrealEditor-Cmd.exe exits after ExecCmds and truncates live traversal to
@@ -102,6 +110,7 @@ if mode in test_modes and result.returncode == 0:
         sys.exit(1)
 if mode == 'playtest' and result.returncode == 0:
     route_reports = {
+        'playtest_outer_spine_motorcycle': ('IndustrialHospital', child_env.get('CARNIVAL_SPINE_MOTO_REPORT','OuterSpine_Motorcycle_20261001')+'.json'),
         'playtest_hospital_motorcycle_route': ('IndustrialHospital', 'Motorcycle_Route_Playtest.json'),
         'probe_motorcycle_route_stall': ('IndustrialHospital', 'Motorcycle_Tyre_Stall_Probe.json'),
         'playtest_industrial_hospital_route': ('IndustrialHospital', 'Route_Playtest.json'),
@@ -110,7 +119,7 @@ if mode == 'playtest' and result.returncode == 0:
     custom_route_report = child_env.get('CARNIVAL_ROUTE_REPORT_PREFIX')
     if script.stem == 'playtest_world_expansion_walk_routes' and child_env.get('CARNIVAL_EXPANSION_REPORT'):
         route_reports[script.stem] = ('WorldExpansion', child_env['CARNIVAL_EXPANSION_REPORT'] + '.json')
-    if custom_route_report and script.stem == 'playtest_industrial_hospital_route':
+    if custom_route_report and script.stem in ('playtest_industrial_hospital_route','playtest_outer_spine_motorcycle'):
         route_reports[script.stem] = ('IndustrialHospital', custom_route_report + '.json')
     if script.stem in route_reports:
         report_folder, report_file = route_reports[script.stem]
@@ -122,8 +131,13 @@ if mode == 'playtest' and result.returncode == 0:
         print('Route:', {'success': report.get('success'), 'errors': report.get('errors', [])})
         if not report.get('success') or report.get('errors') or not report.get('tests') or any(not test.get('success') for test in report['tests']):
             sys.exit(1)
-if mode in ('playtest','render-pie') and script:
+if mode in ('playtest','render-pie','editor') and script:
     acceptance_reports = {
+        'playtest_water_vehicle_recovery': base/'Saved/WorldExpansion/WaterVehicleAcceptance'/child_env.get('CARNIVAL_RECOVERY_REPORT','WaterVehicleRecovery_20261029_v1')/'index.json',
+        'playtest_hovercraft_shore_route': base/'Saved/WorldExpansion/WaterVehicleAcceptance'/(child_env.get('CARNIVAL_HOVER_ROUTE_REPORT','HovercraftShoreRoute_20261029_v5')+'.json'),
+        'playtest_east_dock_basin_returns': base/'Saved/WorldExpansion/EastDockBasinReturnsPIE_20261029.json',
+        'review_wayfinding_views': base/'Saved/WorldExpansion'/('WayfindingViews_'+child_env.get('CARNIVAL_WAYFINDING_VIEW',child_env.get('CARNIVAL_WAYFINDING_REVISION','20261029_v5')))/'index.json',
+        'playtest_edge_fences': base/'Saved/WorldExpansion'/('EdgeFencesPIE'+child_env.get('CARNIVAL_AUDIT_SUFFIX','_20261001')+'.json'),
         'verify_crowd_roaming_pie': base/'Saved/CrowdAcceptance'/child_env.get('CARNIVAL_CROWD_REPORT','RoamingPIE_20260930')/'index.json',
         'playtest_all_attended_rides': base/'Saved/RideDevelopment'/child_env.get('CARNIVAL_RIDE_REPORT','AllRidePIE_'+child_env['CARNIVAL_RIDE_LIGHTING'] if child_env.get('CARNIVAL_RIDE_LIGHTING') else 'AllRidePIE')/'index.json',
         'inspect_ride_seats_pie': base/'Saved/RideDevelopment/ConstructedSeatIds.json',
@@ -145,8 +159,8 @@ if mode in ('playtest','render-pie') and script:
         'survey_water_vehicle_placements': base/'Saved/WorldExpansion/WaterVehicleAcceptance'/(child_env.get('CARNIVAL_VEHICLE_WORLD','main')+'_PlacementSurvey.json'),
         'review_lab_b_gallery_pie': base/'Saved/WorldExpansion/LabB_Gallery_PIE/Review.json',
         'playtest_balloon_station_walks': base/'Saved/RideDevelopment'/(child_env.get('CARNIVAL_BALLOON_WALK_REPORT','Balloon_Station_Walks')+'.json'),
-        'survey_dock_water_depth': base/'Saved/WorldExpansion/WaterVehicleAcceptance'/('DockWaterBerth.json' if child_env.get('CARNIVAL_WATER_DEPTH_AREA') == 'boat_berth' else 'DockWaterDepth.json'),
-        'playtest_integrated_water_vehicle_lifecycle': base/'Saved/WorldExpansion/WaterVehicleAcceptance'/(child_env.get('CARNIVAL_VEHICLE_LABEL','Hovercraft_NorthDock_Handling')+'_Lifecycle.json'),
+        'survey_dock_water_depth': base/'Saved/WorldExpansion/WaterVehicleAcceptance'/child_env.get('CARNIVAL_WATER_DEPTH_REPORT',{'boat_berth':'DockWaterBerth.json','north_routes':'NorthDockRouteDepth_20261029_v3.json'}.get(child_env.get('CARNIVAL_WATER_DEPTH_AREA'),'DockWaterDepth.json')),
+        'playtest_integrated_water_vehicle_lifecycle': base/'Saved/WorldExpansion/WaterVehicleAcceptance'/child_env.get('CARNIVAL_WATER_VEHICLE_REPORT',child_env.get('CARNIVAL_VEHICLE_LABEL','Hovercraft_NorthDock_Handling')+('_Course_20261029' if child_env.get('CARNIVAL_BOAT_ACTIVITY_PROBE')=='1' else '_Maneuvers_20261029' if child_env.get('CARNIVAL_BOAT_MANEUVER_PROBE')=='1' else '_Boundary_20261029' if child_env.get('CARNIVAL_BOAT_BOUNDARY_PROBE')=='1' else '_ExtendedRoute_20261029' if child_env.get('CARNIVAL_BOAT_EXTENDED_ROUTE')=='1' else '_Lifecycle')+'.json'),
         'review_child_roster_pie': base/'Saved/CharacterAcceptance/ChildPreview'/(('FaceCloseups'+child_env.get('CARNIVAL_CHILD_PREVIEW_VARIANT','')+'/index.json') if child_env.get('CARNIVAL_CHILD_FACE_PREVIEW')=='1' else 'BlackBoyConsistentBind/index.json' if child_env.get('CARNIVAL_CHILD_CONSISTENT_BIND')=='1' else 'BlackBoyReferenceAlignment/index.json' if child_env.get('CARNIVAL_CHILD_REFERENCE_COMPARISON')=='1' else 'index.json'),
     }
     report_path = acceptance_reports.get(script.stem)
@@ -160,6 +174,7 @@ if mode in ('playtest','render-pie') and script:
         else:report=json.loads(report_path.read_text(encoding='utf-8-sig'))
         report['engine_exit_code']=result.returncode
         if mode=='render-pie':report['render_rhi']=render_rhi
+        elif mode=='editor' and child_env.get('CARNIVAL_RENDER_RHI'):report['render_rhi']=child_env['CARNIVAL_RENDER_RHI']
         if script.stem in ('review_populated_carnival_pie','verify_crowd_roaming_pie','compare_midway_night_fill_pie','review_dean_integrated_crowd_pie','review_crowd_head_skin_candidates_pie'):
             engine_log=logs/(script.stem+'_engine.log')
             if engine_log.exists():

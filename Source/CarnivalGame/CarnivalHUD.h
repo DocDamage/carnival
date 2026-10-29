@@ -32,6 +32,7 @@ public:
 	void ToggleSettingsMenu();
 
 protected:
+	float StoryOverlayBottom = 0.f;
 	void DrawSessionMenu(ACarnivalPlayerController* PC);
 	void DrawVehicleControls(ACarnivalPlayerController* PC);
 	void DrawTelemetry(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC);
@@ -45,5 +46,5 @@ protected:
 	void DrawRideInteraction(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC);
 	void DrawCrosshair();
 
-	void DrawBoxWithText(float X, float Y, float Width, float Height, const FString& Header, const TArray<FString>& Lines, const FLinearColor& BoxColor, const FLinearColor& HeaderColor, const FLinearColor& TextColor);
+	float DrawBoxWithText(float X, float Y, float Width, float Height, const FString& Header, const TArray<FString>& Lines, const FLinearColor& BoxColor, const FLinearColor& HeaderColor, const FLinearColor& TextColor);
 };

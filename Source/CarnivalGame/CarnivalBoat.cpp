@@ -94,7 +94,11 @@ void ACarnivalBoat::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	const FVector Before = GetActorLocation();
 	UpdateWaterPhysics(DeltaTime);
+	const bool bBlocked = CurrentRider && FMath::Abs(ThrottleInput) >= .1f && BrakeInput <= .05f
+		&& DeltaTime > 0 && FVector::Dist2D(Before, GetActorLocation()) / DeltaTime < 20.f;
+	BlockedControlDuration = bBlocked ? BlockedControlDuration + FMath::Max(0.f, DeltaTime) : 0.f;
 }
 
 void ACarnivalBoat::UpdateWaterPhysics(float DeltaTime)
@@ -266,6 +270,9 @@ void ACarnivalBoat::Mount(ACarnivalPlayerCharacter* Rider)
 	}
 
 	BoardingTransform = Rider->GetActorTransform();
+	BoardingVehicleTransform = GetActorTransform();
+	bHasBoardingVehicleTransform = true;
+	BlockedControlDuration = 0.f;
 	BoardingController = Rider->GetController();
 	ClearControlInputs();
 	CurrentRider = Rider;
@@ -283,7 +290,27 @@ void ACarnivalBoat::Mount(ACarnivalPlayerCharacter* Rider)
 
 void ACarnivalBoat::Dismount()
 {
+	if (CanRecoverToBoardingPoint() && TryRecoverToBoardingPoint()) return;
 	if (FMath::Abs(CurrentSpeed) <= 50.f) RestoreRider(false);
+}
+
+bool ACarnivalBoat::CanRecoverToBoardingPoint() const
+{
+	return IsValid(CurrentRider) && GetController() && GetController() == BoardingController.Get()
+		&& bHasBoardingVehicleTransform && BlockedControlDuration >= 2.f;
+}
+
+bool ACarnivalBoat::TryRecoverToBoardingPoint()
+{
+	if (!CanRecoverToBoardingPoint()
+		|| !IsWaterTransformNavigable(BoardingVehicleTransform.GetLocation(), BoardingVehicleTransform.Rotator())
+		|| !CarnivalVehicleExit::IsRecoveryPoseClear(this, CurrentRider, CollisionBox, BoardingVehicleTransform)) return false;
+	if (!SetActorLocationAndRotation(BoardingVehicleTransform.GetLocation(), BoardingVehicleTransform.Rotator(),
+		false, nullptr, ETeleportType::TeleportPhysics)) return false;
+	ClearControlInputs();
+	CurrentSpeed = CurrentBank = CurrentPitch = BlockedControlDuration = 0.f;
+	CarnivalVehicleExit::NotifyRecovery(CurrentRider);
+	return true;
 }
 
 void ACarnivalBoat::ClearControlInputs()

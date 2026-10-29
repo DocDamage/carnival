@@ -27,3 +27,10 @@ for the full list with store links and the `Content/` path each pack installs to
 
 Unreal Engine 5.8 (Windows). See `Docs/CARNIVAL_INTEGRATION_STATUS.md` for the full
 integration status, ride inventory, and next steps.
+
+## Continuous integration
+
+Pull requests to `main` run the required `Source checks` workflow. It validates
+Python/JSON source and change hygiene without Unreal or licensed content.
+See [the CI guide](Docs/CONTINUOUS_INTEGRATION.md) for its scope and local engine
+build/test commands. Green hosted CI does not establish complete-demo acceptance.

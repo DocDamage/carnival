@@ -1,4 +1,4 @@
-"""Build and configure all gameplay blueprints, input actions, and character assets.
+r"""Build and configure all gameplay blueprints, input actions, and character assets.
 
 Run headlessly:
     UnrealEditor-Cmd.exe "CarnivalGame.uproject" -unattended -nullrhi -nosplash

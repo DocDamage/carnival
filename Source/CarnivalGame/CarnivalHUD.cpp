@@ -75,9 +75,9 @@ void ACarnivalHUD::DrawHUD()
 		return;
 	}
 
+	DrawStoryMissionOverlay(PC);
 	DrawActivityOverlay(Char, PC);
 	DrawVehicleControls(PC);
-	DrawStoryMissionOverlay(PC);
 	DrawStoryInteractionPrompt(Char, PC);
 	DrawPlayerRecoveryPrompt(Char, PC);
 	DrawRideInteraction(Char, PC);
@@ -92,10 +92,15 @@ void ACarnivalHUD::DrawVehicleControls(ACarnivalPlayerController* PC)
 	const auto* Hover = Cast<ACarnivalHovercraft>(PC->GetPawn());
 	if (!Bike && !Boat && !Hover) return;
 	TArray<FString> Lines;
-	Lines.Add(FString::Printf(TEXT("[%s] Accelerate  [%s] Reverse  [%s] Steer"),
-		*PC->GetActionKeyLabel(PC->ThrottleAction), *PC->GetActionKeyLabel(PC->BrakeReverseAction), *PC->GetActionKeyLabel(PC->SteerAction)));
-	Lines.Add(FString::Printf(TEXT("[%s] Brake  [%s] Exit / recover"),
-		*PC->GetActionKeyLabel(PC->BrakeAction), *PC->GetActionKeyLabel(PC->InteractMountAction)));
+	if (PC->bUsingGamepad)
+		Lines.Add(FString::Printf(TEXT("[%s] Accelerate  [%s] Reverse  [%s] Steer"),
+			*PC->GetActionKeyLabel(PC->ThrottleAction), *PC->GetActionKeyLabel(PC->BrakeReverseAction), *PC->GetActionKeyLabel(PC->SteerAction)));
+	else
+		Lines.Add(FString::Printf(TEXT("[%s] Forward / reverse  [%s] Steer"),
+			*PC->GetActionKeyLabel(PC->ThrottleAction), *PC->GetActionKeyLabel(PC->SteerAction)));
+	const FString Brake = PC->GetActionKeyLabel(PC->BrakeAction);
+	const FString Exit = FString::Printf(TEXT("[%s] Exit / recover"), *PC->GetActionKeyLabel(PC->InteractMountAction));
+	Lines.Add(Brake == TEXT("Unbound") ? Exit : FString::Printf(TEXT("[%s] Brake  %s"), *Brake, *Exit));
 	if (Hover) Lines.Add(FString::Printf(TEXT("[%s] Boost  [%s] Strafe"),
 		*PC->GetActionKeyLabel(PC->HandbrakeAction), *PC->GetActionKeyLabel(PC->RiderBalanceAction)));
 	const float Width = FMath::Min(580.f, Canvas->ClipX - 40.f);
@@ -159,6 +164,21 @@ void ACarnivalHUD::DrawSessionMenu(ACarnivalPlayerController* PC)
 
 void ACarnivalHUD::DrawPlayerRecoveryPrompt(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC)
 {
+	const auto* Boat = PC ? Cast<ACarnivalBoat>(PC->GetPawn()) : nullptr;
+	const auto* Hover = PC ? Cast<ACarnivalHovercraft>(PC->GetPawn()) : nullptr;
+	if (Canvas && PC && ((Boat && Boat->CanRecoverToBoardingPoint()) || (Hover && Hover->CanRecoverToBoardingPoint())))
+	{
+		const auto* Rider = Boat ? Boat->CurrentRider : Hover->CurrentRider;
+		TArray<FString> Lines;
+		Lines.Add(FString::Printf(TEXT("[%s] Return to boarding point"), *PC->GetActionKeyLabel(PC->InteractMountAction)));
+		if (Rider && Rider->ActiveActivity && Rider->ActiveActivity->ActivityState == ECarnivalActivityState::Active)
+			Lines.Add(TEXT("This cancels the active challenge."));
+		const float Width = FMath::Min(520.f, Canvas->ClipX - 40.f);
+		DrawBoxWithText((Canvas->ClipX - Width) * .5f, Canvas->ClipY - 202.f, Width, 76.f,
+			TEXT("VEHICLE RECOVERY"), Lines, FLinearColor(.025f,.035f,.05f,.92f),
+			FLinearColor(1.f,.72f,.3f), FLinearColor::White);
+		return;
+	}
 	if (!Canvas || !Char || !PC || !Char->CanRecoverToSafePosition()) return;
 	const FString Button = PC->GetActionKeyLabel(PC->CancelAction);
 	TArray<FString> Lines;
@@ -171,6 +191,7 @@ void ACarnivalHUD::DrawPlayerRecoveryPrompt(ACarnivalPlayerCharacter* Char, ACar
 
 void ACarnivalHUD::DrawStoryMissionOverlay(ACarnivalPlayerController* PC)
 {
+	StoryOverlayBottom = 0.f;
 	if (!PC || !PC->GetGameInstance()) return;
 	const UCarnivalMissionSubsystem* Mission = PC->GetGameInstance()->GetSubsystem<UCarnivalMissionSubsystem>();
 	if (!Mission) return;
@@ -186,7 +207,7 @@ void ACarnivalHUD::DrawStoryMissionOverlay(ACarnivalPlayerController* PC)
 	const bool bComplete = Mission->IsMissionComplete();
 	const float Width = FMath::Min(680.f, Canvas->ClipX - 40.f);
 	const float Height = Lines.Num() > 1 ? 78.f : 58.f;
-	DrawBoxWithText((Canvas->ClipX - Width) * .5f, 20.f, Width, Height,
+	StoryOverlayBottom = DrawBoxWithText((Canvas->ClipX - Width) * .5f, 20.f, Width, Height,
 		bCampaignObjective ? TEXT("THE SIGNAL NETWORK") : bComplete ? TEXT("INVESTIGATION COMPLETE") : TEXT("MISSING WORKER"), Lines,
 		FLinearColor(.025f,.035f,.05f,.88f),
 		bComplete ? FLinearColor(.35f,1.f,.55f) : FLinearColor(1.f,.78f,.35f),
@@ -356,11 +377,14 @@ void ACarnivalHUD::DrawTelemetry(ACarnivalPlayerCharacter* Char, ACarnivalPlayer
 	Lines.Add(FString::Printf(TEXT("Motorcycle: [%s] Mount / Dismount / Recover"), *MountButton));
 	if (PC && !Char)
 	{
-		Lines.Add(FString::Printf(TEXT("Driving: [%s] Throttle | [%s] Reverse | [%s] Steer"), *PC->GetActionKeyLabel(PC->ThrottleAction), *PC->GetActionKeyLabel(PC->BrakeReverseAction), *PC->GetActionKeyLabel(PC->SteerAction)));
+		if (PC->bUsingGamepad)
+			Lines.Add(FString::Printf(TEXT("Driving: [%s] Throttle | [%s] Reverse | [%s] Steer"), *PC->GetActionKeyLabel(PC->ThrottleAction), *PC->GetActionKeyLabel(PC->BrakeReverseAction), *PC->GetActionKeyLabel(PC->SteerAction)));
+		else
+			Lines.Add(FString::Printf(TEXT("Driving: [%s] Forward / reverse | [%s] Steer"), *PC->GetActionKeyLabel(PC->ThrottleAction), *PC->GetActionKeyLabel(PC->SteerAction)));
 		if (Cast<ACarnivalHovercraft>(PC->GetPawn()))
 			Lines.Add(FString::Printf(TEXT("[%s] Boost | [%s] Strafe"), *PC->GetActionKeyLabel(PC->HandbrakeAction), *PC->GetActionKeyLabel(PC->RiderBalanceAction)));
 	}
-	Lines.Add(FString::Printf(TEXT("Other vehicles: [%s] Mount / Dismount"), *MountButton));
+	Lines.Add(FString::Printf(TEXT("Other vehicles: [%s] Mount / Dismount / Recover"), *MountButton));
 	Lines.Add(TEXT("Settings: [Escape] / [Options]"));
 
 	DrawBoxWithText(20.0f, 100.0f, FMath::Min(600.f, Canvas->ClipX - 40.f), 48.f + Lines.Num() * 16.f,
@@ -486,12 +510,12 @@ void ACarnivalHUD::DrawCrosshair()
 	DrawRect(FLinearColor(1.0f, 1.0f, 1.0f, 0.7f), CenterX - Size * 0.5f, CenterY - Size * 0.5f, Size, Size);
 }
 
-void ACarnivalHUD::DrawBoxWithText(float X, float Y, float Width, float Height, const FString& Header, const TArray<FString>& Lines, const FLinearColor& BoxColor, const FLinearColor& HeaderColor, const FLinearColor& TextColor)
+float ACarnivalHUD::DrawBoxWithText(float X, float Y, float Width, float Height, const FString& Header, const TArray<FString>& Lines, const FLinearColor& BoxColor, const FLinearColor& HeaderColor, const FLinearColor& TextColor)
 {
 	UFont* Font = GEngine ? GEngine->GetSmallFont() : nullptr;
 	if (!Canvas || !Font || Canvas->ClipX < 64.f || Canvas->ClipY < 64.f)
 	{
-		return;
+		return 0.f;
 	}
 	const float OriginalWidth = Width;
 	const float OriginalHeight = Height;
@@ -566,10 +590,18 @@ void ACarnivalHUD::DrawBoxWithText(float X, float Y, float Width, float Height, 
 		DrawText(Line, TextColor, X + 12.0f, CurrentY, Font, 0.95f, false);
 		CurrentY += BodyStep;
 	}
+	return Y + Height;
 }
 
 void ACarnivalHUD::DrawActivityOverlay(ACarnivalPlayerCharacter* Char, ACarnivalPlayerController* PC)
 {
+	if (!Char && PC)
+	{
+		if (const auto* Bike = Cast<ACarnivalMotorcycle>(PC->GetPawn())) Char = Bike->CurrentRider;
+		else if (const auto* Boat = Cast<ACarnivalBoat>(PC->GetPawn())) Char = Boat->CurrentRider;
+		else if (const auto* Hover = Cast<ACarnivalHovercraft>(PC->GetPawn())) Char = Hover->CurrentRider;
+		else if (const auto* Car = Cast<ACarnivalBumperCar>(PC->GetPawn())) Char = Car->CurrentRider;
+	}
 	if (!Char)
 	{
 		return;
@@ -601,18 +633,14 @@ void ACarnivalHUD::DrawActivityOverlay(ACarnivalPlayerCharacter* Char, ACarnival
 		if (Act->ActivityState == ECarnivalActivityState::Active)
 		{
 			float Width = 520.0f;
-			float Height = 80.0f;
+			float Height = 98.0f;
 			float X = (Canvas->ClipX - Width) * 0.5f;
-			float Y = 20.0f;
-			if (PC && PC->GetGameInstance())
-			{
-				const UCarnivalMissionSubsystem* Mission = PC->GetGameInstance()->GetSubsystem<UCarnivalMissionSubsystem>();
-				if (Mission && Mission->IsMissionActive()) Y = 92.0f;
-			}
+			const float Y = StoryOverlayBottom > 0.f ? StoryOverlayBottom + 10.f : 20.f;
 
 			TArray<FString> Lines;
 			Lines.Add(ActivityInstructions(Act->GetCurrentObjectiveText()));
 			Lines.Add(FString::Printf(TEXT("Time Remaining: %.1fs  |  Score: %d"), Act->TimeRemaining, Act->CurrentScore));
+			if (PC) Lines.Add(FString::Printf(TEXT("[%s] Cancel challenge"), *PC->GetActionKeyLabel(PC->CancelAction)));
 
 			FLinearColor BorderCol = (Act->TimeRemaining < 10.0f) ? FLinearColor(1.0f, 0.2f, 0.2f, 1.0f) : FLinearColor(0.2f, 0.8f, 1.0f, 1.0f);
 			DrawBoxWithText(X, Y, Width, Height,

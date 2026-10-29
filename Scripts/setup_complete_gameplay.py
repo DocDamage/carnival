@@ -1,4 +1,4 @@
-"""Complete configuration of Enhanced Input, Controller mappings, and BuildComponent palette.
+r"""Complete configuration of Enhanced Input, Controller mappings, and BuildComponent palette.
 
 Run headlessly:
     UnrealEditor-Cmd.exe "CarnivalGame.uproject" -unattended -nullrhi -nosplash

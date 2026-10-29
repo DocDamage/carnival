@@ -314,9 +314,11 @@ def author_docks_north():
         spawn_mesh("/Game/Docks/VOL2_Powell/Meshes/SM_Pier_Pillar_01a",
                    (x, y, -360), (0, 0, 0), (1, 1, 1), "NorthDock_Pile")
     for x, y in [(-2700, 1400), (-2700, 3100), (-2700, 4800),
-                 (4800, 2400), (4800, 4200), (4800, 6100),
+                 (4150, 2400), (4150, 4200), (4150, 6100),
                  (-2200, 10200), (700, 10200), (2500, 10200)]:
-        add_lamp((x, y, 70), "NorthDock_Lantern", 90)
+        # Keep the side-pier driving line clear for the 4.1 m hovercraft hull.
+        # This vendor lamp's mesh bottom is 21.7757 cm below its actor pivot.
+        add_lamp((x, y, 57.2243366241455 if x == 4150 else 70), "NorthDock_Lantern", 90)
     spawn_mesh("/Game/Docks/VOL2_Powell/Meshes/SM_Mooring_post_NN_01h",
                (-2450, 7600, 35), (0, 0, 0), (1.2, 1.2, 1.2), "NorthDock_Mooring_Post", required=False)
     spawn_mesh("/Game/Docks/VOL2_Powell/Meshes/SM_Boat_17a",

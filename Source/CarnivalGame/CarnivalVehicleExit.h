@@ -3,10 +3,35 @@
 #include "CarnivalPlayerCharacter.h"
 #include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
+#include "Components/BoxComponent.h"
+#include "CarnivalActivityBase.h"
+#include "CarnivalMissionSubsystem.h"
+#include "Engine/GameInstance.h"
 
 // Shared collision policy for the two kinematic water/hover vehicles.
 namespace CarnivalVehicleExit
 {
+inline bool IsRecoveryPoseClear(AActor* Vehicle, ACarnivalPlayerCharacter* Rider,
+    const UBoxComponent* Hull, const FTransform& Pose)
+{
+    if (!Vehicle || !Vehicle->GetWorld() || !Hull || Pose.ContainsNaN()) return false;
+    FCollisionQueryParams Params(SCENE_QUERY_STAT(CarnivalVehicleRecovery), false, Vehicle);
+    if (Rider) Params.AddIgnoredActor(Rider);
+    return !Vehicle->GetWorld()->OverlapBlockingTestByProfile(Pose.GetLocation(), Pose.GetRotation(),
+        Hull->GetCollisionProfileName(), FCollisionShape::MakeBox(Hull->GetScaledBoxExtent()), Params);
+}
+
+inline void NotifyRecovery(ACarnivalPlayerCharacter* Rider)
+{
+    if (!Rider) return;
+    const bool bCancelled = Rider->ActiveActivity && Rider->ActiveActivity->ActivityState == ECarnivalActivityState::Active;
+    if (bCancelled) Rider->ActiveActivity->AbortActivity();
+    if (UGameInstance* Instance = Rider->GetGameInstance())
+        if (auto* Mission = Instance->GetSubsystem<UCarnivalMissionSubsystem>())
+            Mission->ShowPlayerFeedback(FText::FromString(bCancelled
+                ? TEXT("Returned to boarding point. Challenge cancelled.") : TEXT("Returned to boarding point.")));
+}
+
 inline bool CanReachSeat(const AActor* Vehicle, const ACarnivalPlayerCharacter* Rider, const FVector& SeatOffset)
 {
     if (!IsValid(Rider) || !Vehicle->GetWorld() || Rider->IsParkourTraversing()) return false;

@@ -105,6 +105,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Hover")
 	void Dismount();
 
+	UFUNCTION(BlueprintPure, Category = "Hover|Recovery")
+	bool CanRecoverToBoardingPoint() const;
+	UFUNCTION(BlueprintCallable, Category = "Hover|Recovery")
+	bool TryRecoverToBoardingPoint();
+
 	/* Controls */
 	UFUNCTION(BlueprintCallable, Category = "Hover|Input")
 	void InputThrottle(float Value);
@@ -119,6 +124,9 @@ public:
 	void InputBoost(bool bEnable);
 
 	UFUNCTION(BlueprintCallable, Category = "Hover|Input")
+	void InputBrake(float Value);
+
+	UFUNCTION(BlueprintCallable, Category = "Hover|Input")
 	void ClearControlInputs();
 
 protected:
@@ -128,12 +136,19 @@ protected:
 	void RestoreRider(bool bEmergency);
 	void RecoverLostPossession();
 	FTransform BoardingTransform;
+	FTransform BoardingVehicleTransform;
+	bool bHasBoardingVehicleTransform = false;
+	bool bHasHoverSupport = false;
+	float UnsupportedDuration = 0.f;
+	float BlockedControlDuration = 0.f;
+	float LastSupportedZ = 0.f;
 	TWeakObjectPtr<AController> BoardingController;
 	float FallVelocity = 0.f;
 
 	float ThrottleInput = 0.0f;
 	float SteeringInput = 0.0f;
 	float StrafeInput = 0.0f;
+	float BrakeInput = 0.0f;
 	float CurrentBank = 0.0f;
 	float CurrentPitch = 0.0f;
 };

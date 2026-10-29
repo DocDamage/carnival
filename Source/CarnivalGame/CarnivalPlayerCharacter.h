@@ -310,6 +310,12 @@ protected:
 	float SwimmingRecoveryDelay = 4.f;
 	UPROPERTY(EditDefaultsOnly, Category = "Recovery", meta = (ClampMin = "0.1"))
 	float FallingRecoveryDelay = 5.f;
+	/** Fall net: a fall this far below the last safe standing point recovers automatically (no prompt). */
+	UPROPERTY(EditDefaultsOnly, Category = "Recovery", meta = (ClampMin = "100.0"))
+	float AutoRecoverFallDrop = 4000.f;
+	/** Fall net: a fall lasting this long recovers automatically, whatever the drop. */
+	UPROPERTY(EditDefaultsOnly, Category = "Recovery", meta = (ClampMin = "0.1"))
+	float AutoRecoverFallTime = 8.f;
 
 	FVector LastSafeRecoveryLocation = FVector::ZeroVector;
 	FRotator LastSafeRecoveryRotation = FRotator::ZeroRotator;
@@ -328,6 +334,9 @@ protected:
 	bool bSubmerged = false;
 	bool bSeabedWalking = false;
 	bool bCameraUnderwater = false;
+	bool bWaterVehicleCameraIgnored = false;
+	ECollisionResponse PreWaterVehicleCameraResponse = ECR_Block;
+	void SetWaterVehicleCameraIgnored(bool bIgnored);
 	float LandWalkSpeed = 0.0f;
 	float ClimbOutCooldown = 0.0f;
 	bool bClimbingOut = false;
