@@ -1,6 +1,44 @@
 # Carnival World Expansion — Layout and Connections
 
-Updated 2026-09-29. The supplied map is used as a route and mood reference. Its compass rose, decorative scale, illustrated island boundary, and building sizes were not used as surveyed world coordinates.
+Updated 2026-10-29. The supplied map is used as a route and mood reference. Its compass rose, decorative scale, illustrated island boundary, and building sizes were not used as surveyed world coordinates.
+
+## Latest edge and route verification — 2026-10-29
+
+Surface wayfinding now covers ten key points with double-sided boards: Carnival's
+hospital-road gate, mansion junction, North Dock, prison approach and branches,
+Research Lab, sewer stairs, East Boatyard, Slums and Hospital. There are 38 unlit
+text rows, 20 sign faces and 116 nonblocking paint segments through the real
+prison gate opening. Narrow support posts stay off the sampled travel lines.
+Five spruce roots obscuring the prison/East Dock signs were removed in all
+three seasonal lighting maps; reloads confirm they are absent, including snow
+orphan duplicates. The root map is unchanged; maps/materials are backed up on D:.
+
+Six focused walking legs pass with all 298 wayfinding actors loaded; the later
+foliage clearance only removes obstructions. Twenty final saved-level views
+were inspected at `Saved/WorldExpansion/WayfindingViews_20261029_v5_clearfoliage/`.
+These use controlled DX11 exposure with fog/bloom off and an editor backdrop
+hidden. They accept static sign layout/lettering in that diagnostic view, not
+the full normal-lighting/DX12 gameplay presentation. See the latest surface
+wayfinding checkpoint in `Docs/HANDOFF_20261001.md` for exact reports/backups.
+
+The 677 edge railings and 677 hidden collision caps are present in fresh PIE.
+All 10 configured walking legs pass (Lab branch, service walk, stairs, Atlantis
+tunnel and the outer spine, each outbound/return). The outer spine also passes
+both ways by motorcycle, 3.1 km each way. Reports and preserved logs:
+`Saved/WorldExpansion/Walk_Route_Playtest_CappedEdges_20261029*` and
+`Saved/IndustrialHospital/OuterSpine_Motorcycle_CappedEdges_Cleared_20261029*`.
+Both engine processes exit 0. Full runs use scripted inputs, headless rendering,
+4x simulation speed and an excluded crowd spawner; visual/physical-controller
+acceptance and untested routes/edges remain open.
+
+The vehicle run exposed `SM_CardBox10` on the mansion junction roadway. It now
+rests off the slabs on traced landscape at `(-68200, -82600, 632.752)`;
+`Scripts/clear_mansion_spine_cardbox.py` saves only our mansion copy and preserves
+the root map and connectors. Before/after backups are verified at
+`D:\CarnivalBackups\20261029_mansion_spine`. The test driver now tracks corners
+more closely and brakes before bends; native motorcycle handling is unchanged.
+A fresh normal-speed 58.7 m entrance round trip also passes and confirms the
+saved box relocation. See `Docs/HANDOFF_20261001.md` for the complete checkpoint.
 
 ## Active world and region maps
 

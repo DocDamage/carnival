@@ -137,6 +137,9 @@ def tick(delta):
                 if wall-state["last_heartbeat"]>=2.0: save(); state["last_heartbeat"]=wall
                 return
             state.update(game=game,player=player,case_index=0)
+            report['edge_fences_in_game']=len(unreal.GameplayStatics.get_all_actors_with_tag(game,'CarnivalEdgeFence'))
+            report['edge_fence_caps_in_game']=len(unreal.GameplayStatics.get_all_actors_with_tag(game,'CarnivalEdgeFenceCap'))
+            report['wayfinding_actors_in_game']=len(unreal.GameplayStatics.get_all_actors_with_tag(game,'CarnivalWayfinding'))
             report["player_class"]=player.get_class().get_name()
             controller=player.get_controller()
             report["controller_class"]=controller.get_class().get_name() if controller else None
